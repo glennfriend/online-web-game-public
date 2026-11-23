@@ -192,7 +192,7 @@
       <li>每一輪可以:<strong>棄牌</strong>(放棄這局)、<strong>過牌 / 跟注</strong>(補到和別人一樣多)、<strong>加注</strong>(提高賭注)。</li>
       <li>加注:按一下打開金額選擇,調好後再按一次送出。</li>
       <li>每人 1000 籌碼起始,盲注固定 10 / 20。籌碼輸光就出局。純屬遊戲籌碼,不涉及金錢。</li>
-      <li>對手固定是 4 個電腦玩家。想中途重來:重新整理頁面。</li>
+      <li>對手固定是 3 個電腦玩家。想中途重來:重新整理頁面。</li>
     </ul>
     <p style="margin:8px 0 0">牌型由大到小:</p>
     <ol>
@@ -224,7 +224,7 @@
   var statusEl = $('status'), actBet = $('actBet'), actNext = $('actNext');
   var raisePanel = $('raisePanel'), slider = $('raiseSlider');
 
-  var OPPONENTS = 4;
+  var OPPONENTS = 3;
 
   var players = [], dealer = 0, deck = [], board = [];
   var street = 0, currentBet = 0, minRaise = BB, raises = 0, turn = -1;
@@ -257,7 +257,7 @@
   function newGame() {
     gen++;
     players = [{ name: '你', human: true }];
-    for (var i = 0; i < OPPONENTS; i++) players.push({ name: '電腦 ' + 'ABCD'[i], human: false, style: 0.85 + Math.random() * 0.3 });
+    for (var i = 0; i < OPPONENTS; i++) players.push({ name: '電腦 ' + 'ABC'[i], human: false, style: 0.85 + Math.random() * 0.3 });
     players.forEach(function (p) {
       p.chips = START; p.out = false; p.hole = []; p.folded = false; p.allIn = false;
       p.bet = 0; p.total = 0; p.acted = false; p.show = false; p.note = ''; p.won = 0;
@@ -454,9 +454,10 @@
     if (handOver && p.won > 0) cls += ' win';
     return cls;
   }
-  function nameHTML(p, i) {
-    return p.name + (i === dealer && !p.out ? '<span class="dealer" title="莊家">莊</span>' : '');
+  function dealerHTML(p, i) {
+    return i === dealer && !p.out ? '<span class="dealer" title="莊家">莊</span>' : '';
   }
+  function nameHTML(p, i) { return p.name + dealerHTML(p, i); }
   function noteHTML(p) {
     if (p.out) return '<div class="act">出局</div>';
     var strong = /加注|下注|全下/.test(p.note) || (handOver && p.won > 0);
@@ -494,8 +495,8 @@
     meEl.className = seatClass(me, 0);
     meEl.innerHTML =
       '<div class="cards">' + me.hole.map(function (c) { return cardHTML(c, 'big' + (me.folded ? ' dim' : '')); }).join('') + '</div>' +
-      '<div class="info"><div class="name">' + nameHTML(me, 0) + '</div>' +
-      '<div class="chips">' + me.chips + '</div>' +
+      '<div class="info">' +
+      '<div class="chips">' + me.chips + dealerHTML(me, 0) + '</div>' +
       '<div class="hand">' + hand + '</div>' + noteHTML(me) + '</div>';
   }
 
