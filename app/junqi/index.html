@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>兩人軍棋</title>
+<style>
+  :root {
+    --bg: #f4f1ea;
+    --panel: #fffdf8;
+    --ink: #22252b;
+    --muted: #8a8d94;
+    --border: #d9d4c7;
+    --accent: #2f6fde;
+    --ok: #2e8b57;
+    --bad: #c0392b;
+    /* 棋盤 */
+    --felt: #ecdfc4;
+    --road: #b9a57f;
+    --rail: #6e5a3a;
+    --spot: #dfcfae;
+    --spot-line: #8c7650;
+    --band: #d6c5a0;
+    /* 棋子 */
+    --tile: #fbf7ee;
+    --tile-line: #2b3a55;
+    --foe: #7c3a33;
+    --foe-line: #5b2924;
+    --amber: #d98a00;
+    --move: #2e8b57;
+    --attack: #d0402b;
+    --sprite: url(themes/simple.png);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17191e;
+      --panel: #20232a;
+      --ink: #e8e9ec;
+      --muted: #8e929b;
+      --border: #363a44;
+      --accent: #6ea0ff;
+      --ok: #5fd08f;
+      --bad: #ff7b6e;
+      --felt: #2b2823;
+      --road: #4d473d;
+      --rail: #a89470;
+      --spot: #35312a;
+      --spot-line: #7d6f56;
+      --band: #221f1a;
+      --tile: #d9d2c3;
+      --tile-line: #10151f;
+      --foe: #6a302b;
+      --foe-line: #3f1c19;
+      --amber: #ffb84d;
+      --move: #5fd08f;
+      --attack: #ff6b57;
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Segoe UI", "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", sans-serif;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 8px 8px calc(10px + env(safe-area-inset-bottom));
+  }
+  /* 手機優先:寬度填滿螢幕;桌機則讓整個棋盤不超過視窗高度 */
+  main { width: 100%; max-width: min(440px, max(300px, calc((100vh - 150px) * 0.6))); }
+  header { display: flex; align-items: baseline; justify-content: space-between; height: 32px; }
+  header a { color: var(--muted); text-decoration: none; font-size: 14px; }
+  header a:hover { color: var(--accent); }
+  h1 { margin: 0; font-size: 20px; letter-spacing: 2px; }
+
+  svg#board { display: block; width: 100%; height: auto; touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  .felt { fill: var(--felt); }
+  .road { stroke: var(--road); stroke-width: 0.8; }
+  .rail { stroke: var(--rail); stroke-width: 2.6; stroke-linecap: round; }
+  .post { fill: var(--felt); stroke: var(--road); stroke-width: 0.8; }
+  .camp { fill: var(--spot); stroke: var(--spot-line); stroke-width: 1; }
+  .hq { fill: var(--spot); stroke: var(--spot-line); stroke-width: 1.2; }
+  .band { fill: var(--band); }
+  .band-text { font-size: 9px; fill: var(--spot-line); text-anchor: middle; dominant-baseline: central; letter-spacing: 6px; opacity: 0.8; }
+  .turn { fill: var(--amber); }
+  .hit { fill: transparent; cursor: pointer; }
+
+  /* 棋子是疊在棋盤上的 HTML 圖塊,位置用百分比,移動時用 CSS 過場滑過去 */
+  #boardBox { position: relative; }
+  #pieces { position: absolute; inset: 0; pointer-events: none; }
+  .pc {
+    position: absolute; width: 15.88%; height: 6.41%;
+    transform: translate(-50%, -50%);
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 6px; border: 1px solid; box-sizing: border-box;
+    transition: left var(--dur, 220ms) cubic-bezier(0.2, 0.7, 0.3, 1), top var(--dur, 220ms) cubic-bezier(0.2, 0.7, 0.3, 1),
+                opacity 0.25s ease-out, transform 0.25s ease-out, box-shadow 0.12s;
+  }
+  /* 象牙色是自己的,暗紅色是對方的 */
+  .pc.s0 { background: var(--tile); border-color: var(--tile-line); box-shadow: 0 2px 0 rgba(43, 58, 85, 0.35); }
+  .pc.s1 { background: var(--foe); border-color: var(--foe-line); box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35); }
+  .pc.back::after {
+    content: ''; position: absolute; inset: 3px; border-radius: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+  }
+  .pc.sel { transform: translate(-50%, calc(-50% - 3px)); border: 2px solid var(--amber); box-shadow: 0 5px 0 rgba(43, 58, 85, 0.3); z-index: 3; }
+  .pc.arrived { border: 2px solid var(--amber); }
+  .pc.target { outline: 2px solid var(--attack); outline-offset: 2px; }
+  .pc.dim { opacity: 0.35; }
+  .pc.moving { z-index: 5; }
+  .pc.gone { opacity: 0; transform: translate(-50%, -50%) scale(0.55); }
+
+  /* 圖示:一張合成圖,12 欄 × 2 列(上列給淺色棋面,下列給深色棋面),用 background-position 取其中一格 */
+  .icon {
+    height: 84%; aspect-ratio: 1; flex: none;
+    background-image: var(--sprite); background-size: 1200% 200%; background-repeat: no-repeat;
+  }
+  .pc .name { display: none; font-size: 15px; font-weight: 700; letter-spacing: 1px; white-space: nowrap; }
+  .pc.s0 .name { color: #10203a; }
+  .pc.s1 .name { color: #fff; }
+  .theme-text .pc .icon { display: none; }
+  .theme-text .pc .name { display: block; }
+
+  .dest { fill: var(--move); pointer-events: none; }
+  .left { fill: none; stroke: var(--amber); stroke-width: 1.8; pointer-events: none; }
+  .badge {
+    position: absolute; width: 19px; height: 19px; border-radius: 50%; transform: translate(-50%, -50%);
+    display: flex; align-items: center; justify-content: center; z-index: 6;
+    font-size: 10px; font-weight: 700; color: #fff; border: 1px solid var(--felt);
+    animation: pop 0.2s ease-out;
+  }
+  .badge.win { background: #2e8b57; }
+  .badge.lose { background: #c0392b; }
+  .badge.tie { background: #7d8088; }
+  @keyframes pop { from { transform: translate(-50%, -50%) scale(0.3); opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) {
+    .pc { transition: opacity 0.15s; }
+    .badge { animation: none; }
+  }
+
+  #status { min-height: 22px; margin: 8px 2px; font-size: 14px; line-height: 22px; color: var(--muted); }
+  #status.ok { color: var(--ok); font-weight: 600; }
+  #status.bad { color: var(--bad); font-weight: 600; }
+
+  .actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .actions[hidden] { display: none; }
+  .actions button {
+    border: 1px solid var(--border); background: var(--panel); color: var(--ink);
+    border-radius: 10px; padding: 0 4px; min-height: 48px; font: inherit; font-size: 16px; cursor: pointer;
+    touch-action: manipulation;
+  }
+  .actions button:active { transform: scale(0.97); }
+  .actions button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .actions button.full { grid-column: 1 / -1; }
+  #devPanel { margin-top: 8px; }
+  #devPanel button { border-style: dashed; font-size: 14px; min-height: 42px; }
+  #devPanel button[aria-pressed="true"] { border-color: var(--amber); color: var(--amber); }
+  #devPanel .label { grid-column: 1 / -1; font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+  details { font-size: 14px; color: var(--muted); line-height: 1.7; margin-top: 12px; }
+  details summary { cursor: pointer; color: var(--ink); }
+  details ul { margin: 6px 0 0; padding-left: 20px; }
+  details h2 { margin: 10px 0 6px; font-size: 14px; font-weight: 600; color: var(--ink); }
+  details h2 small { font-weight: 400; color: var(--muted); margin-left: 8px; font-size: 12px; }
+  #legend { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; }
+  #legend .item { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+  #legend .chip {
+    width: 100%; display: flex; justify-content: center; padding: 3px 0;
+    background: var(--tile); border: 1px solid var(--tile-line); border-radius: 6px;
+  }
+  #legend .icon { width: 28px; height: 28px; display: block; }
+  #legend span { font-size: 12px; color: var(--ink); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>兩人軍棋</h1>
+    <a href="../index.html">← 列表</a>
+  </header>
+
+  <div id="boardBox">
+    <svg id="board" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div id="pieces"></div>
+  </div>
+
+  <div id="status" role="status" aria-live="polite"></div>
+
+  <div class="actions" id="actSetup">
+    <button id="btnShuffle">隨機排列</button>
+    <button id="btnStart" class="primary">開始</button>
+  </div>
+  <div class="actions" id="actOver" hidden>
+    <button id="btnAgain" class="primary full">再玩一次</button>
+  </div>
+
+  <div class="actions" id="devPanel" hidden>
+    <button id="btnPeek" class="full" aria-pressed="false">顯示敵軍棋子:關</button>
+    <span class="label">棋子樣式</span>
+  </div>
+
+  <details>
+    <summary>玩法說明</summary>
+    <h2>棋子圖示<small>由大到小,最後三個是特殊棋</small></h2>
+    <div id="legend"></div>
+    <h2>規則</h2>
+    <ul>
+      <li><strong>目標</strong>:奪下對方的軍旗,或讓對方沒有棋可以走。</li>
+      <li><strong>布陣</strong>:開始前先排好自己的 25 顆棋。點兩顆棋就會交換位置(不能交換的棋會變淡);也可以按「隨機排列」。軍旗只能放大本營,地雷只能放最後兩排,炸彈不能放第一排,行營(圓圈)一開始要空著。</li>
+      <li><strong>看不到對方的棋</strong>:暗紅色是對方的棋。兩顆棋相碰時由電腦當裁判,只告訴你誰贏,不會說對方是什麼棋。</li>
+      <li><strong>大小</strong>:司令 &gt; 軍長 &gt; 師長 &gt; 旅長 &gt; 團長 &gt; 營長 &gt; 連長 &gt; 排長 &gt; 工兵。大吃小,一樣大同歸於盡。點自己的棋,棋盤下方會顯示它的名稱。</li>
+      <li><strong>炸彈</strong>:碰到任何棋都同歸於盡。<strong>地雷</strong>:不能動,撞上來的棋會陣亡,只有工兵能挖掉它(炸彈則同歸於盡)。<strong>軍旗</strong>:不能動,被碰到就輸了。</li>
+      <li><strong>走法</strong>:點自己的棋,再點要去的位置。綠點是可以走的地方,紅框是可以攻擊的棋。一般一次走一格;在鐵路(粗線)上可以直線走很多格,不能越過別的棋;工兵在鐵路上還可以轉彎。</li>
+      <li><strong>山界</strong>:兩軍之間只有三條鐵路相通。</li>
+      <li><strong>行營</strong>(圓圈):在裡面的棋不會被攻擊。<strong>大本營</strong>(最後一排的橢圓):棋放進去就不能再動。</li>
+      <li><strong>棋盤上的記號</strong>:橘色框是剛走的棋,橘色小圈是它原本的位置;交手後會出現「勝」「敗」「同」。棋盤邊緣的橘色橫條在下方表示輪到你。</li>
+      <li>司令陣亡時,那一方的軍旗會亮出來。連續很久沒有交手會判和局。</li>
+    </ul>
+  </details>
+</main>
+
+<script src="engine.js"></script>
+<script>
+(function () {
+  'use strict';
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  var SX = 66, SY = 44, PX = 38, PY = 27, GAP = 24, PW = 54, PH = 36, ICON = 30;
+  var BW = PX * 2 + SX * 4, BH = PY * 2 + SY * 11 + GAP;
+  var J = Junqi, N = 60;
+  /*
+   * 棋子樣式(theme)。要新增一種:
+   *   1. 準備一張 12 個圖示橫排的透明 PNG(順序:司令 軍長 師長 旅長 團長 營長 連長 排長 工兵 炸彈 地雷 軍旗)
+   *   2. 執行 node tools/make-junqi-sprite.js 來源.png app/junqi/themes/名稱.png(彩色圖示加 --color)
+   *   3. 在下面加一行 { id: '名稱', name: '顯示名稱', sprite: 'themes/名稱.png' }
+   */
+  var THEMES = [
+    { id: 'simple', name: '簡潔圖示', sprite: 'themes/simple.png' },
+    { id: 'classic-gold', name: '經典金色', sprite: 'themes/classic-gold.png' },
+    { id: 'outline', name: '粗線框', sprite: 'themes/outline.png' },
+    { id: 'rounded', name: '圓潤實心', sprite: 'themes/rounded.png' },
+    { id: 'duotone', name: '雙色扁平', sprite: 'themes/duotone.png' },
+    { id: 'text', name: '文字', text: true }
+  ];
+  // 合成圖裡每種棋(1~12)在第幾欄
+  function spriteCol(type) { return type <= 9 ? 9 - type : type - 1; }
+  function iconHTML(type, dark) {
+    return '<span class="icon" style="background-position:' + (spriteCol(type) / 11 * 100) + '% ' + (dark ? 100 : 0) + '%"></span>';
+  }
+
+  var board = document.getElementById('board');
+  var statusEl = document.getElementById('status');
+  var actSetup = document.getElementById('actSetup'), actOver = document.getElementById('actOver');
+
+  var phase = 'setup';            // setup | play | over
+  var myLayout = null, foeLayout = null, state = null;
+  var selected = -1, dests = [], lastEvent = null, busy = false, gen = 0;
+  var layerMarks, turnBar;
+  var piecesEl = document.getElementById('pieces');
+  var els = new Map();            // 棋子物件 → 畫面上的元素
+  var peek = false;               // 隱藏功能:直接看到敵軍的棋
+
+  function X(p) { return PX + (p % 5) * SX; }
+  function Y(p) { var r = Math.floor(p / 5); return PY + r * SY + (r >= 6 ? GAP : 0); }
+  function el(name, attrs, parent) {
+    var node = document.createElementNS(SVGNS, name);
+    for (var k in attrs) node.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(node);
+    return node;
+  }
+  function setStatus(text, kind) {
+    statusEl.textContent = text;
+    statusEl.className = kind || '';
+  }
+  function later(fn, ms) {
+    var g = gen;
+    setTimeout(function () { if (g === gen) fn(); }, ms);
+  }
+
+  /* ---------- 棋盤底圖(只畫一次) ---------- */
+  function buildBoard() {
+    board.setAttribute('viewBox', '0 0 ' + BW + ' ' + BH);
+    var p, i, q;
+    el('rect', { x: 0, y: 0, width: BW, height: BH, rx: 10, 'class': 'felt' }, board);
+    // 山界:兩軍之間的隔帶,只有三條鐵路穿過
+    var bandY = (Y(25) + Y(30)) / 2;
+    el('rect', { x: 0, y: bandY - 11, width: BW, height: 22, 'class': 'band' }, board);
+    el('text', { x: X(1), y: bandY, 'class': 'band-text' }, board).textContent = '山界';
+    el('text', { x: X(3), y: bandY, 'class': 'band-text' }, board).textContent = '山界';
+
+    var roads = el('g', {}, board), rails = el('g', {}, board), spots = el('g', {}, board);
+    for (p = 0; p < N; p++) {
+      for (i = 0; i < J.roadAdj[p].length; i++) {
+        q = J.roadAdj[p][i];
+        if (q > p) el('line', { x1: X(p), y1: Y(p), x2: X(q), y2: Y(q), 'class': 'road' }, roads);
+      }
+      [1, 3].forEach(function (d) {
+        q = J.railNext[p][d];
+        if (q >= 0) el('line', { x1: X(p), y1: Y(p), x2: X(q), y2: Y(q), 'class': 'rail' }, rails);
+      });
+    }
+    for (p = 0; p < N; p++) {
+      if (J.isCamp(p)) el('circle', { cx: X(p), cy: Y(p), r: 15, 'class': 'camp' }, spots);
+      else if (J.isHQ(p)) el('rect', { x: X(p) - 20, y: Y(p) - 12, width: 40, height: 24, rx: 12, 'class': 'hq' }, spots);
+      else el('rect', { x: X(p) - 13, y: Y(p) - 7, width: 26, height: 14, rx: 3, 'class': 'post' }, spots);
+    }
+    turnBar = el('rect', { x: BW / 2 - 40, y: 0, width: 80, height: 3, rx: 1.5, 'class': 'turn', visibility: 'hidden' }, board);
+    layerMarks = el('g', {}, board);
+    var hits = el('g', {}, board);
+    for (p = 0; p < N; p++) {
+      el('rect', { x: X(p) - SX / 2, y: Y(p) - SY / 2, width: SX, height: SY, 'class': 'hit', 'data-pos': p }, hits);
+    }
+  }
+
+  /* ---------- 畫棋子與記號 ---------- */
+  function place(node, x, y) {
+    node.style.left = (x / BW * 100) + '%';
+    node.style.top = (y / BH * 100) + '%';
+  }
+  function clearPieces() {
+    piecesEl.innerHTML = '';
+    els.clear();
+  }
+
+  function render() {
+    var p, pc, node;
+    var b = state.board;
+    var swapType = phase === 'setup' && selected >= 0 ? myLayout[selected] : 0;
+    var mark = phase !== 'setup' ? lastEvent : null;
+    var seen = new Set();
+
+    for (p = 0; p < N; p++) {
+      pc = b[p];
+      if (!pc) continue;
+      seen.add(pc);
+      node = els.get(pc);
+      if (!node) {
+        node = document.createElement('div');
+        els.set(pc, node);
+        place(node, X(p), Y(p));
+        piecesEl.appendChild(node);
+      }
+      // 對方的棋只有軍旗現形、遊戲結束或開了隱藏功能時才看得到
+      var shown = pc.side === 0 || pc.revealed || phase === 'over' || peek;
+      var cls = 'pc s' + pc.side;
+      if (!shown) cls += ' back';
+      if (p === selected) cls += ' sel';
+      if (mark && mark.to === p && pc === mark.attacker) cls += ' arrived';
+      if (dests.indexOf(p) >= 0) cls += ' target';
+      // 布陣時,不能和選中的棋交換的棋變淡
+      if (swapType && pc.side === 0 && p !== selected &&
+          !(J.canPlace(swapType, p, 0) && J.canPlace(myLayout[p], selected, 0))) cls += ' dim';
+      node.className = cls;
+      var face = shown ? pc.type : 0;
+      if (node._face !== face) {
+        node._face = face;
+        node.innerHTML = face ? iconHTML(face, pc.side === 1) + '<span class="name">' + J.NAMES[face] + '</span>' : '';
+      }
+      place(node, X(p), Y(p));
+    }
+    // 不在棋盤上的棋:淡出縮小後移除
+    els.forEach(function (n, key) {
+      if (seen.has(key)) return;
+      els.delete(key);
+      n.classList.add('gone');
+      setTimeout(function () { if (n.parentNode) n.parentNode.removeChild(n); }, 280);
+    });
+
+    renderMarks();
+  }
+
+  function renderMarks() {
+    var p, i, b = state.board;
+    var mark = phase !== 'setup' ? lastEvent : null;
+    while (layerMarks.firstChild) layerMarks.removeChild(layerMarks.firstChild);
+    Array.prototype.forEach.call(piecesEl.querySelectorAll('.badge'), function (n) { piecesEl.removeChild(n); });
+
+    for (i = 0; i < dests.length; i++) {
+      p = dests[i];
+      if (!b[p]) el('circle', { cx: X(p), cy: Y(p), r: 5, 'class': 'dest' }, layerMarks);
+    }
+    if (mark && !animating) {
+      // 上一步:原本的位置畫小圈;有交手就在交手的位置標出勝敗
+      if (dests.indexOf(mark.from) < 0) el('circle', { cx: X(mark.from), cy: Y(mark.from), r: 6, 'class': 'left' }, layerMarks);
+      if (mark.result !== 'move') {
+        var mine = mark.attacker.side === 0;
+        var won = mark.result === 'win' || mark.result === 'flag';
+        var kind = mark.result === 'tie' ? 'tie' : (won === mine ? 'win' : 'lose');
+        var badge = document.createElement('div');
+        badge.className = 'badge ' + kind;
+        badge.textContent = kind === 'tie' ? '同' : kind === 'win' ? '勝' : '敗';
+        place(badge, X(mark.to) + PW / 2 - 3, Y(mark.to) - PH / 2 + 3);
+        piecesEl.appendChild(badge);
+      }
+    }
+
+    // 橘色橫條:在下緣表示輪到你,在上緣表示輪到對方
+    if (phase === 'play') {
+      turnBar.setAttribute('visibility', 'visible');
+      turnBar.setAttribute('y', state.turn === 0 ? BH - 3 : 0);
+    } else turnBar.setAttribute('visibility', 'hidden');
+  }
+
+  /*
+   * 走一步的動畫。引擎已經把結果算完了,這裡只負責演出來:
+   *   1. 棋子滑到目的地(距離越遠花越久)
+   *   2. 有交手的話,到了之後輸的一方淡出縮小,並標出勝敗
+   */
+  var animating = false;
+  function animateMove(ev, done) {
+    var node = els.get(ev.attacker);
+    var dr = Math.abs(Math.floor(ev.to / 5) - Math.floor(ev.from / 5)), dc = Math.abs(ev.to % 5 - ev.from % 5);
+    var dur = Math.min(440, 190 + 45 * (dr + dc));
+    if (!node) { render(); done(); return; }
+    animating = true;
+    selected = -1; dests = [];
+    Array.prototype.forEach.call(piecesEl.querySelectorAll('.pc'), function (n) { n.classList.remove('sel', 'target', 'arrived'); });
+    renderMarks();
+    node.style.setProperty('--dur', dur + 'ms');
+    node.classList.add('moving');
+    place(node, X(ev.to), Y(ev.to));
+    later(function () {
+      animating = false;
+      node.classList.remove('moving');
+      render();
+      done();
+    }, dur + (ev.result === 'move' ? 20 : 90));
+  }
+
+  /* ---------- 布陣 ---------- */
+  function setup(reshuffle) {
+    gen++;
+    phase = 'setup'; selected = -1; dests = []; lastEvent = null; busy = false;
+    if (reshuffle || !myLayout) myLayout = J.randomLayout(0);
+    foeLayout = J.randomLayout(1);
+    state = J.newGame(myLayout, foeLayout, 0);
+    actSetup.hidden = false; actOver.hidden = true;
+    animating = false;
+    clearPieces();
+    render();
+    setStatus('布陣:點兩顆棋交換位置,排好按「開始」。');
+  }
+
+  var WHY = {};
+  WHY[J.FLAG] = '軍旗只能放在大本營。';
+  WHY[J.MINE] = '地雷只能放在最後兩排。';
+  WHY[J.BOMB] = '炸彈不能放在第一排。';
+
+  function setupTap(pos) {
+    var t = myLayout[pos];
+    if (t === undefined || selected === pos) { selected = -1; render(); return; }
+    if (selected < 0) {
+      selected = pos;
+      render();
+      setStatus('選了「' + J.NAMES[t] + '」,再點另一顆棋交換。');
+      return;
+    }
+    var a = selected, ta = myLayout[a];
+    selected = -1;
+    if (!J.canPlace(ta, pos, 0)) { render(); setStatus(WHY[ta]); return; }
+    if (!J.canPlace(t, a, 0)) { render(); setStatus(WHY[t]); return; }
+    // 交換:兩顆棋互相滑到對方的位置
+    var pa = state.board[a], pb = state.board[pos];
+    myLayout[a] = t; myLayout[pos] = ta;
+    state.board[a] = pb; state.board[pos] = pa;
+    render();
+    setStatus('已交換「' + J.NAMES[ta] + '」和「' + J.NAMES[t] + '」。');
+  }
+
+  /* ---------- 對戰 ---------- */
+  function start() {
+    phase = 'play'; selected = -1; dests = [];
+    state = J.newGame(myLayout, foeLayout, 0);
+    actSetup.hidden = true;
+    clearPieces();
+    render();
+    setStatus('你先走:點自己的棋,再點要去的位置。');
+  }
+
+  function describe(ev) {
+    var A = J.NAMES[ev.attacker.type], D = ev.defender ? J.NAMES[ev.defender.type] : '';
+    var text;
+    if (ev.attacker.side === 0) {
+      if (ev.result === 'move') text = '';
+      else if (ev.result === 'flag') text = '你的' + A + '奪下了軍旗!';
+      else if (ev.result === 'win') text = ev.defender.type === J.MINE ? '你的工兵挖掉了一顆地雷。' : '你的' + A + '吃掉了對方的棋。';
+      else if (ev.result === 'lose') text = '你的' + A + '陣亡了。';
+      else text = '你的' + A + '和對方同歸於盡。';
+    } else {
+      if (ev.result === 'move') text = '';
+      else if (ev.result === 'flag') text = '對方奪走了你的軍旗。';
+      else if (ev.result === 'win') text = '對方吃掉了你的' + D + '。';
+      else if (ev.result === 'lose') text = '對方攻擊你的' + D + ',對方陣亡。';
+      else text = '對方和你的' + D + '同歸於盡。';
+    }
+    if (ev.commanderDied.indexOf(1) >= 0) text += '對方司令陣亡,軍旗現形!';
+    if (ev.commanderDied.indexOf(0) >= 0) text += '你的司令陣亡,軍旗被迫亮出。';
+    return text;
+  }
+
+  function afterMove(ev) {
+    lastEvent = ev;
+    busy = true;
+    animateMove(ev, function () { settle(ev); });
+  }
+
+  function settle(ev) {
+    busy = false;
+    var text = describe(ev);
+    if (state.over) {
+      phase = 'over';
+      var w = state.over.winner, kind = w === 0 ? 'ok' : w === 1 ? 'bad' : '';
+      if (state.over.reason === 'stuck') text += (w === 0 ? '對方已經沒有能走的棋,' : '你已經沒有能走的棋,');
+      if (state.over.reason === 'draw') text += '太久沒有交手,和局。';
+      else text += w === 0 ? '你贏了!' : '你輸了。';
+      render();
+      setStatus(text, kind);
+      actOver.hidden = false;
+      return;
+    }
+    if (state.turn === 1) {
+      busy = true;
+      setStatus(text || '對方思考中…');
+      later(function () {
+        var mv = J.chooseMove(state, 1);
+        afterMove(J.move(state, mv.from, mv.to));
+      }, 500);
+    } else {
+      setStatus(text || '輪到你了。');
+    }
+  }
+
+  function playTap(pos) {
+    if (busy || state.turn !== 0) return;
+    var pc = state.board[pos];
+    if (selected >= 0 && dests.indexOf(pos) >= 0) {
+      afterMove(J.move(state, selected, pos));
+      return;
+    }
+    if (pc && pc.side === 0 && selected !== pos) {
+      selected = pos;
+      dests = J.legalMoves(state.board, pos);
+      render();
+      if (!dests.length) {
+        setStatus(pc.type === J.MINE || pc.type === J.FLAG ? J.NAMES[pc.type] + '不能移動。'
+          : J.isHQ(pos) ? J.NAMES[pc.type] + ':大本營裡的棋不能移動。' : J.NAMES[pc.type] + ':現在沒有地方可以走。');
+      } else setStatus(J.NAMES[pc.type]);
+      return;
+    }
+    // 點空白處或再點一次同一顆棋:取消選取
+    selected = -1; dests = [];
+    render();
+  }
+
+  board.addEventListener('click', function (ev) {
+    var t = ev.target.closest ? ev.target.closest('.hit') : null;
+    if (!t) return;
+    var pos = +t.getAttribute('data-pos');
+    if (phase === 'setup') setupTap(pos);
+    else if (phase === 'play') playTap(pos);
+  });
+
+  document.getElementById('btnShuffle').addEventListener('click', function () { setup(true); });
+  document.getElementById('btnStart').addEventListener('click', function () { if (phase === 'setup') start(); });
+  document.getElementById('btnAgain').addEventListener('click', function () { setup(false); });
+
+  /* ---------- 圖示對照表(放在玩法說明裡) ---------- */
+  function buildLegend() {
+    var html = '';
+    [9, 8, 7, 6, 5, 4, 3, 2, 1, 10, 11, 12].forEach(function (t) {
+      html += '<div class="item"><div class="chip">' + iconHTML(t, false) + '</div><span>' + J.NAMES[t] + '</span></div>';
+    });
+    document.getElementById('legend').innerHTML = html;
+  }
+
+  /* ---------- 隱藏功能:按鍵盤 o 才會出現 ---------- */
+  var devPanel = document.getElementById('devPanel'), btnPeek = document.getElementById('btnPeek');
+  document.addEventListener('keydown', function (ev) {
+    if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+    if (ev.key === 'o' || ev.key === 'O') devPanel.hidden = !devPanel.hidden;
+  });
+  btnPeek.addEventListener('click', function () {
+    peek = !peek;
+    btnPeek.setAttribute('aria-pressed', String(peek));
+    btnPeek.textContent = '顯示敵軍棋子:' + (peek ? '開' : '關');
+    render();
+  });
+
+  // 棋子樣式切換
+  var themeButtons = [];
+  function applyTheme(id) {
+    var theme = THEMES.filter(function (t) { return t.id === id; })[0] || THEMES[0];
+    if (theme.sprite) document.documentElement.style.setProperty('--sprite', 'url("' + theme.sprite + '")');
+    piecesEl.classList.toggle('theme-text', !!theme.text);
+    themeButtons.forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.theme === theme.id)); });
+    try { localStorage.setItem('junqi.theme', theme.id); } catch (e) { /* 沒有 localStorage 也能玩 */ }
+  }
+  THEMES.forEach(function (theme) {
+    var b = document.createElement('button');
+    b.textContent = theme.name;
+    b.dataset.theme = theme.id;
+    b.addEventListener('click', function () { applyTheme(theme.id); });
+    devPanel.appendChild(b);
+    themeButtons.push(b);
+    if (theme.sprite) new Image().src = theme.sprite;   // 先載入,切換時才不會閃
+  });
+  var savedTheme = null;
+  try { savedTheme = localStorage.getItem('junqi.theme'); } catch (e) { /* 忽略 */ }
+  applyTheme(savedTheme);
+
+  buildBoard();
+  buildLegend();
+  setup(true);
+})();
+</script>
+</body>
+</html>
