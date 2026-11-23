@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>猜數字 1A2B</title>
+<style>
+  :root {
+    --bg: #f4f1ea;
+    --panel: #fffdf8;
+    --ink: #22252b;
+    --muted: #8a8d94;
+    --border: #d9d4c7;
+    --accent: #2f6fde;
+    --ok: #2e8b57;
+    --bad: #c0392b;
+    --a: #2e8b57;
+    --b: #d98200;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17191e;
+      --panel: #20232a;
+      --ink: #e8e9ec;
+      --muted: #8e929b;
+      --border: #363a44;
+      --accent: #6ea0ff;
+      --ok: #5fd08f;
+      --bad: #ff7b6e;
+      --a: #5fd08f;
+      --b: #ffb84d;
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Segoe UI", "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", sans-serif;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+  }
+  main { width: 100%; max-width: 440px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+  header a { color: var(--muted); text-decoration: none; font-size: 14px; }
+  header a:hover { color: var(--accent); }
+  h1 { margin: 0; font-size: 22px; letter-spacing: 2px; }
+  h1 small { font-size: 13px; font-weight: 400; color: var(--muted); letter-spacing: 0; margin-left: 6px; }
+
+  .row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .row > .label { font-size: 13px; color: var(--muted); flex: none; }
+  .seg { display: flex; flex: 1; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--panel); }
+  .seg button {
+    border: 0; background: transparent; color: var(--ink);
+    flex: 1; padding: 0; min-height: 40px; font: inherit; font-size: 14px; cursor: pointer;
+    border-right: 1px solid var(--border);
+  }
+  .seg button:last-child { border-right: 0; }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+
+  #slots { display: flex; justify-content: center; gap: 8px; margin: 14px 0 12px; }
+  .slot {
+    width: 52px; height: 60px; border-radius: 10px; border: 1px solid var(--border); background: var(--panel);
+    display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .slot.next { border-color: var(--accent); }
+  .slot.win { border-color: var(--ok); color: var(--ok); }
+
+  #pad { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; touch-action: manipulation; }
+  #pad button {
+    border: 1px solid var(--border); background: var(--panel); color: var(--ink);
+    border-radius: 10px; min-height: 52px; font: inherit; font-size: 22px; cursor: pointer;
+    touch-action: manipulation; user-select: none; -webkit-user-select: none;
+  }
+  #pad button:active { transform: scale(0.96); }
+  #pad button:disabled { opacity: 0.3; cursor: default; transform: none; }
+  #pad .wide { font-size: 16px; }
+  #btnDel { grid-column: span 2; }
+  #pad #btnGo { grid-column: span 3; background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  #status {
+    min-height: 46px; margin: 10px 0; padding: 11px 14px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--panel); font-size: 15px; color: var(--muted);
+  }
+  #status.ok { color: var(--ok); border-color: var(--ok); font-weight: 600; }
+  #status.bad { color: var(--bad); border-color: var(--bad); }
+
+  #history { list-style: none; margin: 0 0 12px; padding: 0; }
+  #history li {
+    display: flex; align-items: center; gap: 12px; padding: 9px 14px;
+    border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums;
+  }
+  #history .no { width: 28px; font-size: 13px; color: var(--muted); }
+  #history .guess { flex: 1; font-size: 22px; letter-spacing: 6px; font-weight: 600; }
+  #history .res { font-size: 20px; font-weight: 600; }
+  #history .res .a { color: var(--a); }
+  #history .res .b { color: var(--b); }
+  #history .res .zero { color: var(--muted); font-weight: 400; }
+
+  details { font-size: 14px; color: var(--muted); line-height: 1.7; }
+  details summary { cursor: pointer; color: var(--ink); }
+  details ul { margin: 6px 0 0; padding-left: 20px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>猜數字<small>1A2B</small></h1>
+    <a href="../index.html">← 遊戲列表</a>
+  </header>
+
+  <div class="row">
+    <span class="label">位數</span>
+    <div class="seg" id="lengths">
+      <button data-len="3">3</button>
+      <button data-len="4">4</button>
+      <button data-len="5">5</button>
+    </div>
+  </div>
+
+  <div id="slots" aria-label="目前輸入"></div>
+
+  <div id="pad">
+    <button data-d="1">1</button><button data-d="2">2</button><button data-d="3">3</button><button data-d="4">4</button><button data-d="5">5</button>
+    <button data-d="6">6</button><button data-d="7">7</button><button data-d="8">8</button><button data-d="9">9</button><button data-d="0">0</button>
+    <button id="btnDel" class="wide">⌫ 刪除</button>
+    <button id="btnGo" class="wide">猜!</button>
+  </div>
+
+  <div id="status" role="status" aria-live="polite"></div>
+
+  <ol id="history"></ol>
+
+  <details>
+    <summary>玩法說明</summary>
+    <ul>
+      <li>電腦想好一組數字,每一位都不重複(可以是 0 開頭),你來猜。</li>
+      <li><strong>A</strong>:數字對、位置也對。<strong>B</strong>:數字對、但位置不對。</li>
+      <li>例如答案是 5281,你猜 1235 → <strong>1A2B</strong>(2 的位置對;1 和 5 有但位置不對)。</li>
+      <li>全部都是 A 就過關,用越少次越好。</li>
+      <li>想重來或換位數:點上方的位數,就會重新出題。</li>
+      <li>電腦上也可以直接用鍵盤輸入數字、Backspace 刪除、Enter 送出。</li>
+    </ul>
+  </details>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  var slotsEl = document.getElementById('slots');
+  var padEl = document.getElementById('pad');
+  var statusEl = document.getElementById('status');
+  var historyEl = document.getElementById('history');
+  var lengthsEl = document.getElementById('lengths');
+  var btnGo = document.getElementById('btnGo');
+  var btnDel = document.getElementById('btnDel');
+
+  var len = 4;
+  try {
+    var saved = +localStorage.getItem('1a2b.len');
+    if (saved >= 3 && saved <= 5) len = saved;
+  } catch (e) { /* 沒有 localStorage 也能玩 */ }
+
+  var secret = '', input = '', tries = 0, won = false;
+
+  function setStatus(text, kind) {
+    statusEl.textContent = text;
+    statusEl.className = kind || '';
+  }
+
+  function makeSecret(n) {
+    var d = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'], out = '';
+    for (var i = 0; i < n; i++) out += d.splice(Math.floor(Math.random() * d.length), 1)[0];
+    return out;
+  }
+
+  /** 回傳 [A, B] */
+  function judge(guess, answer) {
+    var a = 0, b = 0;
+    for (var i = 0; i < guess.length; i++) {
+      if (guess[i] === answer[i]) a++;
+      else if (answer.indexOf(guess[i]) >= 0) b++;
+    }
+    return [a, b];
+  }
+
+  function newGame() {
+    secret = makeSecret(len);
+    input = '';
+    tries = 0;
+    won = false;
+    historyEl.innerHTML = '';
+    try { localStorage.setItem('1a2b.len', String(len)); } catch (e) {}
+    Array.prototype.forEach.call(lengthsEl.children, function (x) {
+      x.setAttribute('aria-pressed', String(+x.dataset.len === len));
+    });
+    render();
+    setStatus('我想好一組 ' + len + ' 位數字了,每位都不重複。開始猜吧!');
+  }
+
+  function render() {
+    slotsEl.innerHTML = '';
+    for (var i = 0; i < len; i++) {
+      var s = document.createElement('div');
+      s.className = 'slot' + (won ? ' win' : i === input.length ? ' next' : '');
+      s.textContent = input[i] || '';
+      slotsEl.appendChild(s);
+    }
+    Array.prototype.forEach.call(padEl.querySelectorAll('[data-d]'), function (b) {
+      b.disabled = won || input.indexOf(b.dataset.d) >= 0 || input.length >= len;
+    });
+    btnDel.disabled = won || input.length === 0;
+    btnGo.textContent = won ? '再玩一次' : '猜!';
+    btnGo.disabled = !won && input.length !== len;
+  }
+
+  function addDigit(d) {
+    if (won || input.length >= len || input.indexOf(d) >= 0) return;
+    input += d;
+    render();
+  }
+  function delDigit() {
+    if (won || !input.length) return;
+    input = input.slice(0, -1);
+    render();
+  }
+
+  function span(cls, text) {
+    var s = document.createElement('span');
+    s.className = cls;
+    s.textContent = text;
+    return s;
+  }
+
+  function submit() {
+    if (won) { newGame(); return; }
+    if (input.length !== len) return;
+    var r = judge(input, secret);
+    tries++;
+    var li = document.createElement('li');
+    li.appendChild(span('no', '#' + tries));
+    li.appendChild(span('guess', input));
+    var res = span('res', '');
+    res.appendChild(span(r[0] ? 'a' : 'zero', r[0] + 'A'));
+    res.appendChild(span(r[1] ? 'b' : 'zero', r[1] + 'B'));
+    li.appendChild(res);
+    historyEl.insertBefore(li, historyEl.firstChild);   // 最新的在最上面
+    if (r[0] === len) {
+      won = true;
+      setStatus('✔ 答對了!答案是 ' + secret + ',共猜了 ' + tries + ' 次 🎉', 'ok');
+    } else {
+      setStatus(input + ' → ' + r[0] + 'A' + r[1] + 'B');
+      input = '';
+    }
+    render();
+  }
+
+  padEl.addEventListener('click', function (ev) {
+    var b = ev.target.closest('button');
+    if (!b || b.disabled) return;
+    if (b.dataset.d !== undefined) addDigit(b.dataset.d);
+    else if (b === btnDel) delDigit();
+    else if (b === btnGo) submit();
+  });
+
+  lengthsEl.addEventListener('click', function (ev) {
+    var b = ev.target.closest('button');
+    if (!b) return;
+    len = +b.dataset.len;
+    newGame();
+  });
+
+  document.addEventListener('keydown', function (ev) {
+    if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+    if (ev.key >= '0' && ev.key <= '9' && ev.key.length === 1) addDigit(ev.key);
+    else if (ev.key === 'Backspace') delDigit();
+    else if (ev.key === 'Enter') { ev.preventDefault(); submit(); }
+  });
+
+  newGame();
+})();
+</script>
+</body>
+</html>

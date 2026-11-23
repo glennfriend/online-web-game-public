@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>造橋 Hashiwokakero</title>
+<style>
+  :root {
+    --bg: #f4f1ea;
+    --panel: #fffdf8;
+    --ink: #22252b;
+    --muted: #8a8d94;
+    --border: #d9d4c7;
+    --accent: #2f6fde;
+    --line: #1f2a44;
+    --ok: #2e8b57;
+    --bad: #c0392b;
+    --hint: #f08c00;
+    --done: #b3b6bd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17191e;
+      --panel: #20232a;
+      --ink: #e8e9ec;
+      --muted: #8e929b;
+      --border: #363a44;
+      --accent: #6ea0ff;
+      --line: #dfe6f7;
+      --ok: #5fd08f;
+      --bad: #ff7b6e;
+      --hint: #ffb84d;
+      --done: #5d616b;
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Segoe UI", "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", sans-serif;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+  }
+  /* 手機優先:寬度填滿螢幕;桌機則限制寬度,並讓盤面不超過視窗高度 */
+  main { width: 100%; max-width: min(560px, max(320px, calc(100vh - 300px))); }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+  header a { color: var(--muted); text-decoration: none; font-size: 14px; }
+  header a:hover { color: var(--accent); }
+  h1 { margin: 0; font-size: 22px; letter-spacing: 2px; }
+  h1 small { font-size: 13px; font-weight: 400; color: var(--muted); letter-spacing: 0; margin-left: 6px; }
+
+  .row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .row > .label { font-size: 13px; color: var(--muted); flex: none; }
+  .seg { display: flex; flex: 1; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--panel); }
+  .seg button {
+    border: 0; background: transparent; color: var(--ink);
+    flex: 1; padding: 0; min-height: 40px; font: inherit; font-size: 14px; cursor: pointer;
+    border-right: 1px solid var(--border);
+  }
+  .seg button:last-child { border-right: 0; }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+
+  .board-wrap {
+    position: relative;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 4px;
+    margin: 10px 0;
+  }
+  svg#board { -webkit-touch-callout: none; display: block; width: 100%; height: auto; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+  .hit { fill: transparent; cursor: pointer; }
+  .bridge { stroke: var(--line); stroke-width: 2.6; stroke-linecap: round; visibility: hidden; pointer-events: none; }
+  g.edge.v1 .b1, g.edge.v2 .b2 { visibility: visible; }
+  g.edge.hinted .bridge { stroke: var(--hint); animation: pulse 0.5s ease-in-out 3; }
+  g.edge.wrong .bridge { stroke: var(--bad); animation: pulse 0.5s ease-in-out 3; }
+  @keyframes pulse { 50% { stroke-width: 5; } }
+  .island circle { fill: var(--panel); stroke: var(--ink); stroke-width: 1.6; }
+  .island text { font-size: 19px; font-weight: 600; fill: var(--ink); text-anchor: middle; dominant-baseline: central; }
+  .island { pointer-events: none; }
+  .island.done circle { stroke: var(--done); }
+  .island.done text { fill: var(--done); }
+  .island.over circle { stroke: var(--bad); }
+  .island.over text { fill: var(--bad); }
+
+  .busy {
+    position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+    background: color-mix(in srgb, var(--panel) 80%, transparent); border-radius: 12px; font-size: 16px; color: var(--muted);
+  }
+  .busy.show { display: flex; }
+
+  .actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .actions button {
+    border: 1px solid var(--border); background: var(--panel); color: var(--ink);
+    border-radius: 10px; padding: 0 4px; min-height: 50px; font: inherit; font-size: 16px; cursor: pointer;
+    touch-action: manipulation;
+  }
+  .actions button:active { transform: scale(0.97); }
+  .actions button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .actions button:disabled { opacity: 0.45; cursor: default; }
+
+  #status {
+    min-height: 46px; margin: 10px 0; padding: 11px 14px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--panel); font-size: 15px; color: var(--muted);
+  }
+  #status.ok { color: var(--ok); border-color: var(--ok); font-weight: 600; }
+  #status.bad { color: var(--bad); border-color: var(--bad); font-weight: 600; }
+  #status.hint { color: var(--hint); border-color: var(--hint); }
+
+  details { font-size: 14px; color: var(--muted); line-height: 1.7; }
+  details summary { cursor: pointer; color: var(--ink); }
+  details ul { margin: 6px 0 0; padding-left: 20px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>造橋<small>Hashiwokakero</small></h1>
+    <a href="../index.html">← 遊戲列表</a>
+  </header>
+
+  <div class="row">
+    <span class="label">大小</span>
+    <div class="seg" id="sizes"></div>
+  </div>
+  <div class="row">
+    <span class="label">難度</span>
+    <div class="seg" id="levels">
+      <button data-level="easy">簡單</button>
+      <button data-level="medium">中等</button>
+      <button data-level="hard">困難</button>
+    </div>
+  </div>
+
+  <div class="board-wrap">
+    <svg id="board" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div class="busy" id="busy">出題中…</div>
+  </div>
+
+  <div class="actions">
+    <button id="btnCheck" class="primary">對答案</button>
+    <button id="btnHint">給一個提示</button>
+    <button id="btnUndo">復原</button>
+  </div>
+
+  <div id="status" role="status" aria-live="polite"></div>
+
+  <details>
+    <summary>玩法說明</summary>
+    <ul>
+      <li>用橋把所有島連成<strong>一整片</strong>,從任何一座島都能走到其他島。</li>
+      <li>島上的數字是這座島總共要接幾座橋。</li>
+      <li>橋只能直的或橫的,不能交叉,也不能跨過別的島;兩座島之間最多兩座橋。</li>
+      <li>點一下兩座島之間:一座橋 → 兩座橋 → 沒有橋。</li>
+      <li>電腦按右鍵、手機長按:直接拆掉那裡的橋。</li>
+      <li>想換一題:再點一次上方的大小或難度,就會出新題目。</li>
+      <li>數字變灰表示橋數剛好,變紅表示橋太多。</li>
+      <li>每一題都只有唯一解。</li>
+    </ul>
+  </details>
+</main>
+
+<script src="engine.js"></script>
+<script>
+(function () {
+  'use strict';
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  var S = 48, PAD = 26, R = 16, GAP = 4, HALF = 19;
+  var LEVEL_NAME = { easy: '簡單', medium: '中等', hard: '困難' };
+
+  var board = document.getElementById('board');
+  var statusEl = document.getElementById('status');
+  var busyEl = document.getElementById('busy');
+  var sizesEl = document.getElementById('sizes');
+  var levelsEl = document.getElementById('levels');
+
+  var prefs = { n: 7, level: 'easy' };
+  try {
+    var saved = JSON.parse(localStorage.getItem('hashi.prefs') || 'null');
+    if (saved && saved.n >= 5 && saved.n <= 9 && LEVEL_NAME[saved.level]) prefs = saved;
+  } catch (e) { /* 沒有 localStorage 也能玩 */ }
+
+  var puzzle = null;
+  var val = null;         // 玩家每條邊的橋數 0..2
+  var history = [];
+  var edgeEls = [], islandEls = [], geo = [];
+  var finished = false;
+
+  function el(name, attrs) {
+    var node = document.createElementNS(SVGNS, name);
+    for (var k in attrs) node.setAttribute(k, attrs[k]);
+    return node;
+  }
+  function setStatus(text, kind) {
+    statusEl.textContent = text;
+    statusEl.className = kind || '';
+  }
+
+  /* ---------- 選項 ---------- */
+  for (var n = 5; n <= 9; n++) {
+    var b = document.createElement('button');
+    b.textContent = String(n);
+    b.dataset.n = n;
+    sizesEl.appendChild(b);
+  }
+  function syncOptions() {
+    Array.prototype.forEach.call(sizesEl.children, function (x) {
+      x.setAttribute('aria-pressed', String(+x.dataset.n === prefs.n));
+    });
+    Array.prototype.forEach.call(levelsEl.children, function (x) {
+      x.setAttribute('aria-pressed', String(x.dataset.level === prefs.level));
+    });
+  }
+  sizesEl.addEventListener('click', function (ev) {
+    var t = ev.target.closest('button');
+    if (!t) return;
+    prefs.n = +t.dataset.n;
+    newGame();
+  });
+  levelsEl.addEventListener('click', function (ev) {
+    var t = ev.target.closest('button');
+    if (!t) return;
+    prefs.level = t.dataset.level;
+    newGame();
+  });
+
+  /* ---------- 出題 ---------- */
+  function newGame() {
+    syncOptions();
+    try { localStorage.setItem('hashi.prefs', JSON.stringify(prefs)); } catch (e) {}
+    busyEl.classList.add('show');
+    setStatus('出題中…');
+    setTimeout(function () {
+      puzzle = Hashi.generate(prefs.n, prefs.level);
+      val = new Uint8Array(puzzle.edges.length);
+      history = [];
+      finished = false;
+      buildBoard();
+      render();
+      busyEl.classList.remove('show');
+      setStatus(puzzle.n + '×' + puzzle.n + '・' + LEVEL_NAME[prefs.level] + ' — 用橋把所有島連起來吧!');
+    }, 30);
+  }
+
+  /* ---------- 畫盤面 ---------- */
+  function buildBoard() {
+    var size = (puzzle.n - 1) * S + PAD * 2;
+    board.setAttribute('viewBox', '0 0 ' + size + ' ' + size);
+    while (board.firstChild) board.removeChild(board.firstChild);
+    edgeEls = []; islandEls = []; geo = [];
+
+    puzzle.edges.forEach(function (ed, e) {
+      var A = puzzle.islands[ed.a], B = puzzle.islands[ed.b];
+      var x1 = PAD + A.c * S, y1 = PAD + A.r * S, x2 = PAD + B.c * S, y2 = PAD + B.r * S;
+      var ox = ed.h ? 0 : GAP, oy = ed.h ? GAP : 0;
+      var g = el('g', { 'class': 'edge', 'data-e': e });
+      g.appendChild(el('line', { x1: x1, y1: y1, x2: x2, y2: y2, 'class': 'bridge b1' }));
+      g.appendChild(el('line', { x1: x1 - ox, y1: y1 - oy, x2: x2 - ox, y2: y2 - oy, 'class': 'bridge b2' }));
+      g.appendChild(el('line', { x1: x1 + ox, y1: y1 + oy, x2: x2 + ox, y2: y2 + oy, 'class': 'bridge b2' }));
+      var rect = ed.h
+        ? { x: x1, y: y1 - HALF, width: x2 - x1, height: HALF * 2 }
+        : { x: x1 - HALF, y: y1, width: HALF * 2, height: y2 - y1 };
+      rect['class'] = 'hit';
+      g.appendChild(el('rect', rect));
+      board.appendChild(g);
+      edgeEls.push(g);
+      geo.push({ h: ed.h, x1: x1, y1: y1, x2: x2, y2: y2 });
+    });
+
+    puzzle.islands.forEach(function (is) {
+      var g = el('g', { 'class': 'island' });
+      var cx = PAD + is.c * S, cy = PAD + is.r * S;
+      g.appendChild(el('circle', { cx: cx, cy: cy, r: R }));
+      var tx = el('text', { x: cx, y: cy });
+      tx.textContent = String(is.need);
+      g.appendChild(tx);
+      board.appendChild(g);
+      islandEls.push(g);
+    });
+  }
+
+  function render() {
+    var e, i;
+    for (e = 0; e < val.length; e++) {
+      edgeEls[e].classList.toggle('v1', val[e] === 1);
+      edgeEls[e].classList.toggle('v2', val[e] === 2);
+    }
+    for (i = 0; i < puzzle.islands.length; i++) {
+      var sum = 0, list = puzzle.inc[i];
+      for (e = 0; e < list.length; e++) sum += val[list[e]];
+      islandEls[i].classList.toggle('done', sum === puzzle.islands[i].need);
+      islandEls[i].classList.toggle('over', sum > puzzle.islands[i].need);
+    }
+    document.getElementById('btnUndo').disabled = history.length === 0;
+  }
+
+  function clearMarks() {
+    for (var e = 0; e < edgeEls.length; e++) edgeEls[e].classList.remove('hinted', 'wrong');
+  }
+  function setEdge(e, value) {
+    if (val[e] === value) return;
+    history.push([e, val[e]]);
+    val[e] = value;
+  }
+
+  /* ---------- 操作 ---------- */
+  // 兩條可能的橋交叉時點擊區會重疊:已經有橋的優先,否則選離點擊位置最近的那條
+  function edgeFromEvent(ev) {
+    var g = ev.target.closest ? ev.target.closest('g.edge') : null;
+    if (!g) return -1;
+    var e = +g.getAttribute('data-e');
+    var cross = puzzle.edges[e].cross;
+    if (!cross.length) return e;
+    var m = board.getScreenCTM();
+    if (!m) return e;
+    var pt = board.createSVGPoint();
+    pt.x = ev.clientX; pt.y = ev.clientY;
+    pt = pt.matrixTransform(m.inverse());
+    function dist(k) {
+      var q = geo[k];
+      if (q.h) return (pt.x < q.x1 || pt.x > q.x2) ? Infinity : Math.abs(pt.y - q.y1);
+      return (pt.y < q.y1 || pt.y > q.y2) ? Infinity : Math.abs(pt.x - q.x1);
+    }
+    var best = e, bestD = dist(e), i;
+    for (i = 0; i < cross.length; i++) {
+      var d = dist(cross[i]);
+      if (d > HALF) continue;
+      if (val[cross[i]] > 0) return cross[i];
+      if (val[best] === 0 && d < bestD) { best = cross[i]; bestD = d; }
+    }
+    return best;
+  }
+
+  function act(e, remove) {
+    if (e < 0 || finished) return;
+    clearMarks();
+    if (remove) {
+      setEdge(e, 0);
+    } else {
+      var next = (val[e] + 1) % 3;
+      if (val[e] === 0) {
+        var cross = puzzle.edges[e].cross;
+        for (var i = 0; i < cross.length; i++) {
+          if (val[cross[i]] > 0) { setStatus('這裡會和別的橋交叉,不能蓋。', 'hint'); return; }
+        }
+      }
+      setEdge(e, next);
+    }
+    render();
+    setStatus('');
+  }
+
+  var pressTimer = null, longPressed = false, lastPointer = 'mouse', pressX = 0, pressY = 0;
+  function cancelPress() { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } }
+
+  board.addEventListener('pointerdown', function (ev) {
+    lastPointer = ev.pointerType;
+    longPressed = false;
+    cancelPress();
+    if (ev.pointerType === 'mouse') return;
+    var e = edgeFromEvent(ev);
+    if (e < 0) return;
+    pressX = ev.clientX; pressY = ev.clientY;
+    pressTimer = setTimeout(function () {
+      pressTimer = null;
+      longPressed = true;
+      act(e, true);
+    }, 380);
+  });
+  board.addEventListener('pointermove', function (ev) {
+    if (pressTimer && Math.abs(ev.clientX - pressX) + Math.abs(ev.clientY - pressY) > 12) cancelPress();
+  });
+  board.addEventListener('pointerup', cancelPress);
+  board.addEventListener('pointercancel', cancelPress);
+
+  board.addEventListener('click', function (ev) {
+    if (longPressed) { longPressed = false; return; }
+    act(edgeFromEvent(ev), false);
+  });
+  board.addEventListener('contextmenu', function (ev) {
+    ev.preventDefault();
+    if (lastPointer !== 'mouse') return;   // 觸控的長按已由上面處理
+    act(edgeFromEvent(ev), true);
+  });
+
+  document.getElementById('btnUndo').addEventListener('click', function () {
+    if (!history.length || finished) return;
+    var h = history.pop();
+    val[h[0]] = h[1];
+    clearMarks();
+    render();
+    setStatus('');
+  });
+
+  document.getElementById('btnCheck').addEventListener('click', function () {
+    if (!puzzle) return;
+    clearMarks();
+    if (Hashi.checkAnswer(puzzle, val)) {
+      finished = true;
+      setStatus('✔ 正確!恭喜過關 🎉 點上方的大小或難度可以再玩一題。', 'ok');
+    } else {
+      setStatus('✘ 失敗,答案還不對,再檢查看看。', 'bad');
+    }
+  });
+
+  document.getElementById('btnHint').addEventListener('click', function () {
+    if (!puzzle || finished) return;
+    clearMarks();
+    var sol = puzzle.solution, missing = [], extra = [], e, i;
+    for (e = 0; e < val.length; e++) {
+      if (val[e] < sol[e]) missing.push(e);
+      else if (val[e] > sol[e]) extra.push(e);
+    }
+    if (!missing.length && !extra.length) {
+      setStatus('橋都蓋對了,按「對答案」吧!', 'hint');
+      return;
+    }
+    // 多蓋的橋可能擋住正確的橋,所以先指出多的
+    if (extra.length) {
+      e = extra[Math.floor(Math.random() * extra.length)];
+      edgeEls[e].classList.add('wrong');
+      setStatus('提示:紅色閃爍的地方橋蓋太多了。', 'hint');
+      return;
+    }
+    // 優先提示接在已經有橋的島上的那一座
+    var near = missing.filter(function (k) {
+      var ed = puzzle.edges[k], lists = [puzzle.inc[ed.a], puzzle.inc[ed.b]];
+      for (var q = 0; q < 2; q++) for (i = 0; i < lists[q].length; i++) if (val[lists[q][i]] > 0) return true;
+      return false;
+    });
+    var pool = near.length ? near : missing;
+    e = pool[Math.floor(Math.random() * pool.length)];
+    setEdge(e, val[e] + 1);
+    render();
+    edgeEls[e].classList.add('hinted');
+    setStatus('提示:已幫你蓋上一座正確的橋(橘色)。', 'hint');
+  });
+
+  newGame();
+})();
+</script>
+</body>
+</html>

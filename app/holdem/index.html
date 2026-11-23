@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>德州撲克 Texas Hold'em</title>
+<style>
+  :root {
+    --bg: #f4f1ea;
+    --panel: #fffdf8;
+    --ink: #22252b;
+    --muted: #8a8d94;
+    --border: #d9d4c7;
+    --accent: #2f6fde;
+    --ok: #2e8b57;
+    --bad: #c0392b;
+    --table: #e6efe6;
+    --card: #ffffff;
+    --card-red: #c0392b;
+    --card-back: #6f86b8;
+    --gold: #d98200;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17191e;
+      --panel: #20232a;
+      --ink: #e8e9ec;
+      --muted: #8e929b;
+      --border: #363a44;
+      --accent: #6ea0ff;
+      --ok: #5fd08f;
+      --bad: #ff7b6e;
+      --table: #1d2a24;
+      --card: #f3f3f0;
+      --card-red: #c0392b;
+      --card-back: #4a5f8f;
+      --gold: #ffb84d;
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Segoe UI", "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", sans-serif;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+  }
+  main { width: 100%; max-width: 460px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+  header a { color: var(--muted); text-decoration: none; font-size: 14px; }
+  header a:hover { color: var(--accent); }
+  h1 { margin: 0; font-size: 22px; letter-spacing: 2px; }
+  h1 small { font-size: 13px; font-weight: 400; color: var(--muted); letter-spacing: 0; margin-left: 6px; }
+
+  .row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .row > .label { font-size: 13px; color: var(--muted); flex: none; }
+  .seg { display: flex; flex: 1; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--panel); }
+  .seg button {
+    border: 0; background: transparent; color: var(--ink);
+    flex: 1; padding: 0; min-height: 40px; font: inherit; font-size: 14px; cursor: pointer;
+    border-right: 1px solid var(--border);
+  }
+  .seg button:last-child { border-right: 0; }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+
+  /* 牌 */
+  .card {
+    display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
+    width: 46px; height: 64px; border-radius: 7px; border: 1px solid var(--border);
+    background: var(--card); color: #22252b; font-weight: 700; font-size: 20px; line-height: 1.05;
+    font-variant-numeric: tabular-nums;
+  }
+  .card span { font-size: 18px; font-weight: 400; }
+  .card.red { color: var(--card-red); }
+  .card.back { background: var(--card-back); border-color: var(--card-back); }
+  .card.empty { background: transparent; border-style: dashed; }
+  .card.small { width: 30px; height: 42px; font-size: 14px; border-radius: 5px; }
+  .card.small span { font-size: 12px; }
+  .card.big { width: 58px; height: 80px; font-size: 26px; }
+  .card.big span { font-size: 22px; }
+  .card.dim { opacity: 0.35; }
+
+  .table {
+    background: var(--table); border: 1px solid var(--border); border-radius: 14px; padding: 8px;
+  }
+  #opps { display: grid; gap: 6px; }
+  .seat {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 6px 4px;
+    text-align: center; min-width: 0;
+  }
+  .seat.turn { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .seat.win { border-color: var(--ok); box-shadow: 0 0 0 1px var(--ok); }
+  .seat.out { opacity: 0.4; }
+  .seat .name { font-size: 13px; color: var(--muted); white-space: nowrap; }
+  .seat .chips { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .seat .cards { display: flex; justify-content: center; gap: 3px; margin: 4px 0; min-height: 42px; }
+  .seat .act { font-size: 12px; min-height: 17px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .seat .act.strong { color: var(--gold); font-weight: 600; }
+  .dealer {
+    display: inline-block; width: 17px; height: 17px; line-height: 17px; border-radius: 50%;
+    background: var(--gold); color: #fff; font-size: 11px; font-weight: 700; margin-left: 3px; vertical-align: 1px;
+  }
+
+  #center { text-align: center; padding: 12px 0 10px; }
+  #boardCards { display: flex; justify-content: center; gap: 5px; }
+  #pot { margin-top: 8px; font-size: 15px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  #pot b { color: var(--ink); font-size: 18px; }
+
+  #me { display: flex; align-items: center; gap: 12px; padding: 8px 10px; text-align: left; }
+  #me .cards { margin: 0; min-height: 80px; gap: 5px; }
+  #me .info { flex: 1; min-width: 0; }
+  #me .chips { font-size: 20px; }
+  #me .hand { font-size: 14px; color: var(--accent); min-height: 20px; }
+
+  #status {
+    min-height: 46px; margin: 10px 0; padding: 11px 14px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--panel); font-size: 15px; color: var(--muted);
+  }
+  #status.ok { color: var(--ok); border-color: var(--ok); font-weight: 600; }
+  #status.bad { color: var(--bad); border-color: var(--bad); font-weight: 600; }
+
+  .actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .actions button, #raisePanel button {
+    border: 1px solid var(--border); background: var(--panel); color: var(--ink);
+    border-radius: 10px; padding: 0 4px; min-height: 52px; font: inherit; font-size: 16px; cursor: pointer;
+    touch-action: manipulation;
+  }
+  .actions button:active, #raisePanel button:active { transform: scale(0.97); }
+  .actions button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .actions button:disabled { opacity: 0.4; cursor: default; transform: none; }
+  .actions button.full { grid-column: 1 / -1; }
+  .actions[hidden], #raisePanel[hidden] { display: none; }
+
+  #raisePanel { margin-bottom: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }
+  #raisePanel .amount { text-align: center; font-size: 15px; color: var(--muted); }
+  #raisePanel .amount b { font-size: 22px; color: var(--ink); font-variant-numeric: tabular-nums; }
+  #raisePanel input[type=range] { width: 100%; height: 36px; margin: 4px 0; accent-color: var(--accent); }
+  #raisePanel .presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  #raisePanel .presets button { min-height: 40px; font-size: 14px; }
+
+  details { font-size: 14px; color: var(--muted); line-height: 1.7; margin-top: 10px; }
+  details summary { cursor: pointer; color: var(--ink); }
+  details ul, details ol { margin: 6px 0 0; padding-left: 20px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>德州撲克<small>Texas Hold'em</small></h1>
+    <a href="../index.html">← 遊戲列表</a>
+  </header>
+
+  <div class="table">
+    <div id="opps"></div>
+    <div id="center">
+      <div id="boardCards"></div>
+      <div id="pot"></div>
+    </div>
+    <div class="seat" id="me"></div>
+  </div>
+
+  <div id="status" role="status" aria-live="polite"></div>
+
+  <div id="raisePanel" hidden>
+    <div class="amount"><span id="raiseWord">加注到</span> <b id="raiseValue">0</b></div>
+    <input type="range" id="raiseSlider" step="10">
+    <div class="presets">
+      <button data-p="min">最小</button>
+      <button data-p="half">半池</button>
+      <button data-p="pot">滿池</button>
+      <button data-p="all">全下</button>
+    </div>
+  </div>
+
+  <div class="actions" id="actBet" hidden>
+    <button id="btnFold">棄牌</button>
+    <button id="btnRaise">加注</button>
+    <button id="btnCall" class="primary">過牌</button>
+  </div>
+  <div class="actions" id="actNext" hidden>
+    <button id="btnNext" class="primary full">下一局</button>
+  </div>
+
+  <details>
+    <summary>玩法說明</summary>
+    <ul>
+      <li>每人發兩張底牌,桌上陸續翻開五張公共牌(翻牌 3 張、轉牌 1 張、河牌 1 張)。</li>
+      <li>用自己的兩張加上公共牌,組出最好的五張牌,牌型最大的人贏走底池。</li>
+      <li>每一輪可以:<strong>棄牌</strong>(放棄這局)、<strong>過牌 / 跟注</strong>(補到和別人一樣多)、<strong>加注</strong>(提高賭注)。</li>
+      <li>加注:按一下打開金額選擇,調好後再按一次送出。</li>
+      <li>每人 1000 籌碼起始,盲注固定 10 / 20。籌碼輸光就出局。純屬遊戲籌碼,不涉及金錢。</li>
+      <li>對手固定是 4 個電腦玩家。想中途重來:重新整理頁面。</li>
+    </ul>
+    <p style="margin:8px 0 0">牌型由大到小:</p>
+    <ol>
+      <li>皇家同花順:同花色的 10 J Q K A</li>
+      <li>同花順:同花色的五張連號</li>
+      <li>四條:四張同點數</li>
+      <li>葫蘆:三張同點數 + 一對</li>
+      <li>同花:五張同花色</li>
+      <li>順子:五張連號</li>
+      <li>三條:三張同點數</li>
+      <li>兩對</li>
+      <li>一對</li>
+      <li>高牌</li>
+    </ol>
+  </details>
+</main>
+
+<script src="engine.js"></script>
+<script>
+(function () {
+  'use strict';
+  var SB = 10, BB = 20, START = 1000;
+  var RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+  var SUITS = ['♣', '♦', '♥', '♠'];
+  var STREET = ['翻牌前', '翻牌', '轉牌', '河牌'];
+
+  var $ = function (id) { return document.getElementById(id); };
+  var oppsEl = $('opps'), boardEl = $('boardCards'), potEl = $('pot'), meEl = $('me');
+  var statusEl = $('status'), actBet = $('actBet'), actNext = $('actNext');
+  var raisePanel = $('raisePanel'), slider = $('raiseSlider');
+
+  var OPPONENTS = 4;
+
+  var players = [], dealer = 0, deck = [], board = [];
+  var street = 0, currentBet = 0, minRaise = BB, raises = 0, turn = -1;
+  var handOver = true, gameOver = false, waiting = false;
+  var gen = 0;   // 每次重開遊戲就 +1,讓舊的計時器失效
+
+  function setStatus(text, kind) {
+    statusEl.textContent = text;
+    statusEl.className = kind || '';
+  }
+  function later(fn, ms) {
+    var g = gen;
+    setTimeout(function () { if (g === gen) fn(); }, ms);
+  }
+  function pot() {
+    return players.reduce(function (s, p) { return s + p.total; }, 0);
+  }
+  function alive() { return players.filter(function (p) { return !p.out && !p.folded; }); }
+  function canAct(p) { return !p.out && !p.folded && !p.allIn; }
+  function nextIdx(i, test) {
+    for (var k = 1; k <= players.length; k++) {
+      var j = (i + k) % players.length;
+      if (test(players[j])) return j;
+    }
+    return -1;
+  }
+  var inHand = function (p) { return !p.out; };
+
+  /* ---------- 開局 ---------- */
+  function newGame() {
+    gen++;
+    players = [{ name: '你', human: true }];
+    for (var i = 0; i < OPPONENTS; i++) players.push({ name: '電腦 ' + 'ABCD'[i], human: false, style: 0.85 + Math.random() * 0.3 });
+    players.forEach(function (p) {
+      p.chips = START; p.out = false; p.hole = []; p.folded = false; p.allIn = false;
+      p.bet = 0; p.total = 0; p.acted = false; p.show = false; p.note = ''; p.won = 0;
+    });
+    dealer = Math.floor(Math.random() * players.length);
+    gameOver = false;
+    startHand();
+  }
+
+  function post(p, amount) {
+    amount = Math.min(amount, p.chips);
+    p.chips -= amount; p.bet += amount; p.total += amount;
+    if (p.chips === 0) p.allIn = true;
+    return amount;
+  }
+
+  function startHand() {
+    players.forEach(function (p) {
+      if (p.chips <= 0) p.out = true;
+      p.hole = []; p.folded = false; p.allIn = false; p.bet = 0; p.total = 0;
+      p.acted = false; p.show = false; p.note = ''; p.won = 0;
+    });
+    var left = players.filter(inHand);
+    if (players[0].out || left.length < 2) {
+      gameOver = true; handOver = true; turn = -1;
+      board = [];
+      render();
+      if (players[0].out) setStatus('你的籌碼輸光了。按「重新開始」再來一次!', 'bad');
+      else setStatus('✔ 你贏光了所有對手的籌碼 🎉', 'ok');
+      return;
+    }
+    handOver = false; waiting = false;
+    dealer = nextIdx(dealer, inHand);
+    deck = Holdem.shuffledDeck(Math.random);
+    board = []; street = 0;
+    for (var round = 0; round < 2; round++) {
+      players.forEach(function (p) { if (!p.out) p.hole.push(deck.pop()); });
+    }
+    // 兩人對戰時,莊家就是小盲
+    var sb = left.length === 2 ? dealer : nextIdx(dealer, inHand);
+    var bb = nextIdx(sb, inHand);
+    post(players[sb], SB); players[sb].note = '小盲 ' + players[sb].bet;
+    post(players[bb], BB); players[bb].note = '大盲 ' + players[bb].bet;
+    currentBet = BB; minRaise = BB; raises = 0;
+    turn = nextIdx(bb, canAct);
+    setStatus('新的一局開始。');
+    loop();
+  }
+
+  /* ---------- 下注流程 ---------- */
+  function loop() {
+    waiting = false;
+    var live = alive();
+    if (live.length === 1) { finish(); return; }
+    var actors = live.filter(canAct);
+    var done = actors.every(function (p) { return p.acted && p.bet === currentBet; });
+    if (actors.length === 0 || (actors.length === 1 && actors[0].bet >= currentBet)) done = true;
+    if (done) { turn = -1; render(); later(nextStreet, 500); return; }
+    if (turn < 0 || !canAct(players[turn])) turn = nextIdx(turn < 0 ? dealer : turn, canAct);
+    var p = players[turn];
+    render();
+    if (p.human) {
+      waiting = true;
+      showActions();
+    } else {
+      later(function () { botAct(p); }, players[0].folded ? 350 : 750);
+    }
+  }
+
+  function nextStreet() {
+    players.forEach(function (p) { p.bet = 0; p.acted = false; if (!p.folded) p.note = p.allIn ? '全下' : ''; });
+    currentBet = 0; minRaise = BB; raises = 0;
+    street++;
+    if (street > 3) { finish(); return; }
+    deck.pop();                               // 燒一張
+    var count = street === 1 ? 3 : 1;
+    for (var i = 0; i < count; i++) board.push(deck.pop());
+    var actors = alive().filter(canAct);
+    if (actors.length <= 1) {
+      // 大家都全下了:亮牌,直接把公共牌發完
+      alive().forEach(function (p) { p.show = true; });
+      turn = -1;
+      render();
+      setStatus(STREET[street] + '。已經全下,直接發完公共牌。');
+      later(nextStreet, 1100);
+      return;
+    }
+    turn = nextIdx(dealer, canAct);
+    setStatus(STREET[street] + '。');
+    loop();
+  }
+
+  function act(p, type, raiseTo) {
+    hideActions();
+    var toCall = currentBet - p.bet;
+    if (type === 'fold') {
+      p.folded = true; p.note = '棄牌';
+    } else if (type === 'call') {
+      var paid = post(p, toCall);
+      p.note = p.allIn ? '全下' : (paid === 0 ? '過牌' : '跟注 ' + p.bet);
+    } else {
+      raiseTo = Math.min(raiseTo, p.bet + p.chips);
+      var wasBet = currentBet > 0;
+      var inc = raiseTo - currentBet;
+      post(p, raiseTo - p.bet);
+      if (raiseTo > currentBet) {
+        if (inc >= minRaise) minRaise = inc;
+        currentBet = raiseTo;
+        raises++;
+        players.forEach(function (q) { if (q !== p) q.acted = false; });
+      }
+      p.note = p.allIn ? '全下 ' + p.bet : (wasBet ? '加注到 ' : '下注 ') + p.bet;
+    }
+    p.acted = true;
+    setStatus(p.name + ':' + p.note);
+    turn = nextIdx(turn, canAct);
+    loop();
+  }
+
+  /* ---------- 電腦對手 ---------- */
+  function botAct(p) {
+    var others = alive().length - 1;
+    var e = Holdem.equity(p.hole, board, 1, 160);     // 對上一個隨機對手的勝率
+    var toCall = Math.min(currentBet - p.bet, p.chips);
+    var total = pot(), r = Math.random(), crowd = 0.04 * (others - 1);
+    var strong = 0.66 / p.style + crowd, monster = 0.8 / p.style + crowd;
+    var stack = p.bet + p.chips;
+    function raiseBy(frac) {
+      var size = Math.max(minRaise, Math.round(total * frac / 10) * 10);
+      return Math.min(stack, currentBet + size);
+    }
+    var mayRaise = raises < 3 && stack > currentBet + minRaise;
+
+    if (toCall <= 0) {
+      if (mayRaise && (e > strong || (e > 0.5 && r < 0.3) || r < 0.06)) {
+        act(p, 'raise', raiseBy(0.5 + Math.random() * 0.3));
+      } else act(p, 'call');
+      return;
+    }
+    var odds = toCall / (total + toCall);
+    if (mayRaise && (e > monster || (e > strong && r < 0.3))) {
+      act(p, 'raise', raiseBy(0.6 + Math.random() * 0.4));
+      return;
+    }
+    var need = odds + 0.12 + crowd;
+    if (toCall > p.chips * 0.4) need = Math.max(need, 0.6);   // 要押上大半籌碼時謹慎一點
+    if (e > need) act(p, 'call');
+    else act(p, 'fold');
+  }
+
+  /* ---------- 結算 ---------- */
+  function finish() {
+    hideActions();
+    handOver = true; turn = -1;
+    var live = alive();
+    var showdown = live.length > 1;
+    players.forEach(function (p) {
+      p.score = (!p.out && !p.folded && showdown) ? Holdem.evaluate(p.hole.concat(board)) : 0;
+      if (showdown && !p.out && !p.folded) p.show = true;
+    });
+    var won = Holdem.payouts(players.map(function (p) {
+      return { total: p.total, folded: p.out || p.folded, score: p.score };
+    }));
+    var lines = [];
+    players.forEach(function (p, i) {
+      p.chips += won[i];
+      p.won = won[i] - p.total;            // 這一局的淨輸贏
+      if (showdown && !p.out && !p.folded) p.note = Holdem.handName(p.score);
+      if (p.won > 0) lines.push(p.name + '贏了 ' + p.won + (showdown ? '(' + Holdem.handName(p.score) + ')' : ''));
+    });
+    var me = players[0];
+    var text = lines.join(',') || '平手,各自拿回籌碼';
+    if (!showdown) text += ',其他人都棄牌了';
+    setStatus(text + '。', me.won > 0 ? 'ok' : me.won < 0 ? 'bad' : '');
+    render();
+    var remaining = players.filter(function (p) { return !p.out && p.chips > 0; });
+    $('btnNext').textContent = (me.chips <= 0 || remaining.length < 2) ? '看結果' : '下一局';
+    actNext.hidden = false;
+  }
+
+  /* ---------- 畫面 ---------- */
+  function cardHTML(c, cls) {
+    cls = cls ? ' ' + cls : '';
+    if (c === null) return '<div class="card empty' + cls + '"></div>';
+    if (c === -1) return '<div class="card back' + cls + '"></div>';
+    var red = (c & 3) === 1 || (c & 3) === 2;
+    return '<div class="card' + (red ? ' red' : '') + cls + '">' + RANKS[c >> 2] + '<span>' + SUITS[c & 3] + '</span></div>';
+  }
+
+  function seatClass(p, i) {
+    var cls = 'seat';
+    if (p.out) cls += ' out';
+    if (i === turn && !handOver) cls += ' turn';
+    if (handOver && p.won > 0) cls += ' win';
+    return cls;
+  }
+  function nameHTML(p, i) {
+    return p.name + (i === dealer && !p.out ? '<span class="dealer" title="莊家">莊</span>' : '');
+  }
+  function noteHTML(p) {
+    if (p.out) return '<div class="act">出局</div>';
+    var strong = /加注|下注|全下/.test(p.note) || (handOver && p.won > 0);
+    return '<div class="act' + (strong ? ' strong' : '') + '">' + (p.note || '&nbsp;') + '</div>';
+  }
+
+  function render() {
+    oppsEl.style.gridTemplateColumns = 'repeat(' + (players.length - 1) + ', 1fr)';
+    var html = '';
+    players.forEach(function (p, i) {
+      if (p.human) return;
+      var cards = '';
+      if (!p.out && p.hole.length) {
+        cards = p.hole.map(function (c) {
+          return cardHTML(p.show ? c : -1, 'small' + (p.folded ? ' dim' : ''));
+        }).join('');
+      }
+      html += '<div class="' + seatClass(p, i) + '">' +
+        '<div class="name">' + nameHTML(p, i) + '</div>' +
+        '<div class="chips">' + p.chips + '</div>' +
+        '<div class="cards">' + cards + '</div>' + noteHTML(p) + '</div>';
+    });
+    oppsEl.innerHTML = html;
+
+    var b = '';
+    for (var k = 0; k < 5; k++) b += cardHTML(k < board.length ? board[k] : null);
+    boardEl.innerHTML = b;
+    potEl.innerHTML = gameOver ? '&nbsp;' : '底池 <b>' + pot() + '</b>';
+
+    var me = players[0];
+    var hand = '';
+    if (!handOver && !me.out && !me.folded && me.hole.length && board.length >= 3) {
+      hand = '目前牌型:' + Holdem.handName(Holdem.evaluate(me.hole.concat(board)));
+    }
+    meEl.className = seatClass(me, 0);
+    meEl.innerHTML =
+      '<div class="cards">' + me.hole.map(function (c) { return cardHTML(c, 'big' + (me.folded ? ' dim' : '')); }).join('') + '</div>' +
+      '<div class="info"><div class="name">' + nameHTML(me, 0) + '</div>' +
+      '<div class="chips">' + me.chips + '</div>' +
+      '<div class="hand">' + hand + '</div>' + noteHTML(me) + '</div>';
+  }
+
+  /* ---------- 玩家操作 ---------- */
+  var raiseOpen = false;
+
+  function hideActions() {
+    actBet.hidden = true; actNext.hidden = true; raisePanel.hidden = true; raiseOpen = false;
+  }
+
+  function showActions() {
+    var me = players[0];
+    var toCall = Math.min(currentBet - me.bet, me.chips);
+    var maxTo = me.bet + me.chips;
+    var minTo = Math.min(maxTo, currentBet + minRaise);
+    actBet.hidden = false; actNext.hidden = true;
+    raisePanel.hidden = true; raiseOpen = false;
+    $('btnFold').disabled = false;
+    $('btnCall').textContent = toCall <= 0 ? '過牌' : (toCall >= me.chips ? '全下 ' + toCall : '跟注 ' + toCall);
+    var canRaise = maxTo > currentBet;
+    $('btnRaise').disabled = !canRaise;
+    $('btnRaise').textContent = currentBet > 0 ? '加注' : '下注';
+    if (canRaise) {
+      slider.min = minTo; slider.max = maxTo;
+      slider.value = minTo;
+      $('raiseWord').textContent = currentBet > 0 ? '加注到' : '下注';
+      updateRaiseLabel();
+    }
+    setStatus(toCall > 0 ? '輪到你了:要跟注 ' + toCall + ' 才能繼續。' : '輪到你了。');
+  }
+
+  function raiseAmount() {
+    var v = +slider.value, max = +slider.max, min = +slider.min;
+    if (v >= max) return max;
+    v = Math.round(v / 10) * 10;
+    return Math.max(min, Math.min(max, v));
+  }
+  function updateRaiseLabel() {
+    var v = raiseAmount(), me = players[0];
+    $('raiseValue').textContent = v >= me.bet + me.chips ? v + '(全下)' : String(v);
+    if (raiseOpen) $('btnRaise').textContent = '確定 ' + v;
+  }
+  slider.addEventListener('input', updateRaiseLabel);
+
+  raisePanel.addEventListener('click', function (ev) {
+    var b = ev.target.closest('button[data-p]');
+    if (!b) return;
+    var me = players[0], min = +slider.min, max = +slider.max, total = pot();
+    var toCall = currentBet - me.bet, v;
+    if (b.dataset.p === 'min') v = min;
+    else if (b.dataset.p === 'all') v = max;
+    else {
+      // 先跟注之後的底池,再加上它的一半或全部
+      var after = total + toCall;
+      v = currentBet + Math.round(after * (b.dataset.p === 'half' ? 0.5 : 1) / 10) * 10;
+    }
+    slider.value = Math.max(min, Math.min(max, v));
+    updateRaiseLabel();
+  });
+
+  $('btnFold').addEventListener('click', function () {
+    if (waiting) act(players[0], 'fold');
+  });
+  $('btnCall').addEventListener('click', function () {
+    if (waiting) act(players[0], 'call');
+  });
+  $('btnRaise').addEventListener('click', function () {
+    if (!waiting) return;
+    if (!raiseOpen) {
+      raiseOpen = true;
+      raisePanel.hidden = false;
+      updateRaiseLabel();
+      return;
+    }
+    act(players[0], 'raise', raiseAmount());
+  });
+
+  $('btnNext').addEventListener('click', function () {
+    if (!handOver) return;
+    if (gameOver) { newGame(); return; }
+    actNext.hidden = true;
+    startHand();
+    if (gameOver) { $('btnNext').textContent = '重新開始'; actNext.hidden = false; }
+  });
+
+  newGame();
+})();
+</script>
+</body>
+</html>
