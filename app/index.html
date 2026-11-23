@@ -51,5 +51,11 @@
     </a>
   </div>
 </main>
+<script>
+// 用網址開啟時,把遊戲存到裝置上,之後沒網路也能玩(直接開檔案時不需要)
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  navigator.serviceWorker.register('../sw.js').catch(function () { /* 不支援就照常使用 */ });
+}
+</script>
 </body>
 </html>
