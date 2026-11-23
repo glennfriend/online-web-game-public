@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>數迴 Slitherlink</title>
+<style>
+  :root {
+    --bg: #f4f1ea;
+    --panel: #fffdf8;
+    --ink: #22252b;
+    --muted: #8a8d94;
+    --border: #d9d4c7;
+    --accent: #2f6fde;
+    --line: #1f2a44;
+    --dot: #22252b;
+    --cross: #c0453a;
+    --ok: #2e8b57;
+    --bad: #c0392b;
+    --hint: #f08c00;
+    --done: #b3b6bd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17191e;
+      --panel: #20232a;
+      --ink: #e8e9ec;
+      --muted: #8e929b;
+      --border: #363a44;
+      --accent: #6ea0ff;
+      --line: #dfe6f7;
+      --dot: #e8e9ec;
+      --cross: #ff7b6e;
+      --ok: #5fd08f;
+      --bad: #ff7b6e;
+      --hint: #ffb84d;
+      --done: #5d616b;
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Segoe UI", "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", sans-serif;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+  }
+  /* 手機優先:寬度填滿螢幕;桌機則限制寬度,並讓盤面不超過視窗高度 */
+  main { width: 100%; max-width: min(560px, max(320px, calc(100vh - 300px))); }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+  header a { color: var(--muted); text-decoration: none; font-size: 14px; }
+  header a:hover { color: var(--accent); }
+  h1 { margin: 0; font-size: 22px; letter-spacing: 2px; }
+  h1 small { font-size: 13px; font-weight: 400; color: var(--muted); letter-spacing: 0; margin-left: 6px; }
+
+  .row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .row > .label { font-size: 13px; color: var(--muted); flex: none; }
+  .seg { display: flex; flex: 1; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--panel); }
+  .seg button {
+    border: 0; background: transparent; color: var(--ink);
+    flex: 1; padding: 0; min-height: 40px; font: inherit; font-size: 14px; cursor: pointer;
+    border-right: 1px solid var(--border);
+  }
+  .seg button:last-child { border-right: 0; }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+
+  .board-wrap {
+    position: relative;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 4px;
+    margin: 10px 0;
+  }
+  svg#board { -webkit-touch-callout: none; display: block; width: 100%; height: auto; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+  .hit { fill: transparent; cursor: pointer; }
+  .edge-line { stroke: var(--line); stroke-width: 3.5; stroke-linecap: round; visibility: hidden; pointer-events: none; }
+  .edge-x { stroke: var(--cross); stroke-width: 1.6; stroke-linecap: round; visibility: hidden; pointer-events: none; }
+  .edge-guide { stroke: var(--border); stroke-width: 1; stroke-dasharray: 2 4; pointer-events: none; }
+  g.edge.on .edge-line { visibility: visible; }
+  g.edge.off .edge-x { visibility: visible; }
+  @media (hover: hover) {
+    g.edge:hover .edge-guide { stroke: var(--accent); stroke-dasharray: none; stroke-width: 2; }
+  }
+  g.edge.hinted .edge-line { stroke: var(--hint); animation: pulse 0.5s ease-in-out 3; }
+  g.edge.wrong .edge-line { stroke: var(--bad); animation: pulse 0.5s ease-in-out 3; }
+  @keyframes pulse { 50% { stroke-width: 7; } }
+  .dot { fill: var(--border); pointer-events: none; }
+  .clue { font-size: 24px; font-weight: 600; fill: var(--ink); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+  .clue.done { fill: var(--done); }
+  .clue.over { fill: var(--bad); }
+
+  .busy {
+    position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+    background: color-mix(in srgb, var(--panel) 80%, transparent); border-radius: 12px; font-size: 16px; color: var(--muted);
+  }
+  .busy.show { display: flex; }
+
+  .actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .actions button {
+    border: 1px solid var(--border); background: var(--panel); color: var(--ink);
+    border-radius: 10px; padding: 0 4px; min-height: 50px; font: inherit; font-size: 16px; cursor: pointer;
+    touch-action: manipulation;
+  }
+  .actions button:active { transform: scale(0.97); }
+  .actions button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .actions button:disabled { opacity: 0.45; cursor: default; }
+
+  #status {
+    min-height: 46px; margin: 10px 0; padding: 11px 14px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--panel); font-size: 15px; color: var(--muted);
+  }
+  #status.ok { color: var(--ok); border-color: var(--ok); font-weight: 600; }
+  #status.bad { color: var(--bad); border-color: var(--bad); font-weight: 600; }
+  #status.hint { color: var(--hint); border-color: var(--hint); }
+
+  details { font-size: 14px; color: var(--muted); line-height: 1.7; }
+  details summary { cursor: pointer; color: var(--ink); }
+  details ul { margin: 6px 0 0; padding-left: 20px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>數迴<small>Slitherlink</small></h1>
+    <a href="../index.html">← 遊戲列表</a>
+  </header>
+
+  <div class="row">
+    <span class="label">大小</span>
+    <div class="seg" id="sizes"></div>
+  </div>
+  <div class="row">
+    <span class="label">難度</span>
+    <div class="seg" id="levels">
+      <button data-level="easy">簡單</button>
+      <button data-level="medium">中等</button>
+      <button data-level="hard">困難</button>
+    </div>
+  </div>
+
+  <div class="board-wrap">
+    <svg id="board" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div class="busy" id="busy">出題中…</div>
+  </div>
+
+  <div class="actions">
+    <button id="btnCheck" class="primary">對答案</button>
+    <button id="btnHint">給一個提示</button>
+    <button id="btnUndo">復原</button>
+  </div>
+
+  <div id="status" role="status" aria-live="polite"></div>
+
+  <details>
+    <summary>玩法說明</summary>
+    <ul>
+      <li>沿著點與點之間畫線,把線連成<strong>一個</strong>封閉的迴圈,不能交叉也不能分岔。</li>
+      <li>格子裡的數字代表該格四周有幾條邊是線;沒有數字的格子不限制。</li>
+      <li>電腦:左鍵畫線,右鍵打 ×(確定沒有線)。手機:點一下畫線,長按打 ×。</li>
+      <li>對已經畫線或打 × 的邊再做一次同樣的動作,就是消除。</li>
+      <li>想換一題:再點一次上方的大小或難度,就會出新題目。</li>
+      <li>數字變灰表示該格線數剛好,變紅表示線太多。</li>
+      <li>每一題都只有唯一解。</li>
+    </ul>
+  </details>
+</main>
+
+<script src="engine.js"></script>
+<script>
+(function () {
+  'use strict';
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  var S = 48, PAD = 16;
+  var LEVEL_NAME = { easy: '簡單', medium: '中等', hard: '困難' };
+
+  var board = document.getElementById('board');
+  var statusEl = document.getElementById('status');
+  var busyEl = document.getElementById('busy');
+  var sizesEl = document.getElementById('sizes');
+  var levelsEl = document.getElementById('levels');
+
+  var prefs = { n: 5, level: 'easy' };
+  try {
+    var saved = JSON.parse(localStorage.getItem('slitherlink.prefs') || 'null');
+    if (saved && saved.n >= 3 && saved.n <= 9 && LEVEL_NAME[saved.level]) prefs = saved;
+  } catch (e) { /* 沒有 localStorage 也能玩 */ }
+
+  var puzzle = null;      // { n, clues, solution }
+  var topo = null;
+  var state = null;       // 玩家的邊:0 空, 1 線, 2 ×
+  var history = [];
+  var edgeEls = [], clueEls = [];
+  var finished = false;
+
+  function el(name, attrs) {
+    var node = document.createElementNS(SVGNS, name);
+    for (var k in attrs) node.setAttribute(k, attrs[k]);
+    return node;
+  }
+
+  function setStatus(text, kind) {
+    statusEl.textContent = text;
+    statusEl.className = kind || '';
+  }
+
+  /* ---------- 選項 ---------- */
+  for (var n = 3; n <= 9; n++) {
+    var b = document.createElement('button');
+    b.textContent = String(n);
+    b.dataset.n = n;
+    sizesEl.appendChild(b);
+  }
+  function syncOptions() {
+    Array.prototype.forEach.call(sizesEl.children, function (x) {
+      x.setAttribute('aria-pressed', String(+x.dataset.n === prefs.n));
+    });
+    Array.prototype.forEach.call(levelsEl.children, function (x) {
+      x.setAttribute('aria-pressed', String(x.dataset.level === prefs.level));
+    });
+  }
+  sizesEl.addEventListener('click', function (ev) {
+    var t = ev.target.closest('button');
+    if (!t) return;
+    prefs.n = +t.dataset.n;
+    newGame();
+  });
+  levelsEl.addEventListener('click', function (ev) {
+    var t = ev.target.closest('button');
+    if (!t) return;
+    prefs.level = t.dataset.level;
+    newGame();
+  });
+
+  /* ---------- 出題 ---------- */
+  function newGame() {
+    syncOptions();
+    try { localStorage.setItem('slitherlink.prefs', JSON.stringify(prefs)); } catch (e) {}
+    busyEl.classList.add('show');
+    setStatus('出題中…');
+    // 讓「出題中」先畫出來,再開始運算
+    setTimeout(function () {
+      puzzle = Slitherlink.generate(prefs.n, prefs.level);
+      topo = Slitherlink.topo(puzzle.n);
+      state = new Uint8Array(topo.E);
+      history = [];
+      finished = false;
+      buildBoard();
+      render();
+      busyEl.classList.remove('show');
+      setStatus(puzzle.n + '×' + puzzle.n + '・' + LEVEL_NAME[prefs.level] + ' — 把線連成一個迴圈吧!');
+    }, 30);
+  }
+
+  /* ---------- 畫盤面 ---------- */
+  function buildBoard() {
+    var n = puzzle.n, size = n * S + PAD * 2;
+    board.setAttribute('viewBox', '0 0 ' + size + ' ' + size);
+    while (board.firstChild) board.removeChild(board.firstChild);
+    edgeEls = []; clueEls = [];
+    var r, c, e;
+
+    for (r = 0; r < n; r++) {
+      for (c = 0; c < n; c++) {
+        var k = puzzle.clues[r * n + c];
+        var tx = el('text', { x: PAD + c * S + S / 2, y: PAD + r * S + S / 2, 'class': 'clue' });
+        tx.textContent = k >= 0 ? String(k) : '';
+        board.appendChild(tx);
+        clueEls.push(tx);
+      }
+    }
+
+    for (r = 0; r <= n; r++) {
+      for (c = 0; c <= n; c++) {
+        board.appendChild(el('circle', { cx: PAD + c * S, cy: PAD + r * S, r: 2.2, 'class': 'dot' }));
+      }
+    }
+
+    var H = S * 0.36, X = 4;
+    for (e = 0; e < topo.E; e++) {
+      var info = topo.edgeInfo[e];
+      var x1 = PAD + info.c * S, y1 = PAD + info.r * S;
+      var x2 = info.h ? x1 + S : x1, y2 = info.h ? y1 : y1 + S;
+      var mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+      var g = el('g', { 'class': 'edge', 'data-e': e });
+      var pts = info.h
+        ? [x1, y1, mx, my - H, x2, y2, mx, my + H]
+        : [x1, y1, mx - H, my, x2, y2, mx + H, my];
+      g.appendChild(el('line', { x1: x1, y1: y1, x2: x2, y2: y2, 'class': 'edge-guide' }));
+      g.appendChild(el('line', { x1: x1, y1: y1, x2: x2, y2: y2, 'class': 'edge-line' }));
+      g.appendChild(el('path', {
+        d: 'M' + (mx - X) + ' ' + (my - X) + 'L' + (mx + X) + ' ' + (my + X) +
+           'M' + (mx - X) + ' ' + (my + X) + 'L' + (mx + X) + ' ' + (my - X),
+        'class': 'edge-x'
+      }));
+      g.appendChild(el('polygon', { points: pts.join(' '), 'class': 'hit' }));
+      board.appendChild(g);
+      edgeEls.push(g);
+    }
+
+  }
+
+  function render() {
+    for (var e = 0; e < topo.E; e++) {
+      edgeEls[e].classList.toggle('on', state[e] === 1);
+      edgeEls[e].classList.toggle('off', state[e] === 2);
+    }
+    for (var i = 0; i < clueEls.length; i++) {
+      var k = puzzle.clues[i];
+      if (k < 0) continue;
+      var cnt = Slitherlink.cellCount(topo, state, i);
+      clueEls[i].classList.toggle('done', cnt === k);
+      clueEls[i].classList.toggle('over', cnt > k);
+    }
+    document.getElementById('btnUndo').disabled = history.length === 0;
+  }
+
+  function clearMarks() {
+    for (var e = 0; e < edgeEls.length; e++) edgeEls[e].classList.remove('hinted', 'wrong');
+  }
+
+  function setEdge(e, value) {
+    if (state[e] === value) return;
+    history.push([e, state[e]]);
+    state[e] = value;
+  }
+
+  /* ---------- 操作 ---------- */
+  function edgeFromEvent(ev) {
+    var g = ev.target.closest ? ev.target.closest('g.edge') : null;
+    return g ? +g.getAttribute('data-e') : -1;
+  }
+  // 左鍵/點一下 = 線,右鍵/長按 = ×;對已經是該狀態的邊再做一次就是消除
+  function mark(e, value) {
+    if (e < 0 || finished) return;
+    clearMarks();
+    setEdge(e, state[e] === value ? 0 : value);
+    render();
+    setStatus('');
+  }
+
+  var pressTimer = null, longPressed = false, lastPointer = 'mouse', pressX = 0, pressY = 0;
+  function cancelPress() { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } }
+
+  board.addEventListener('pointerdown', function (ev) {
+    lastPointer = ev.pointerType;
+    longPressed = false;
+    cancelPress();
+    if (ev.pointerType === 'mouse') return;
+    var e = edgeFromEvent(ev);
+    if (e < 0) return;
+    pressX = ev.clientX; pressY = ev.clientY;
+    pressTimer = setTimeout(function () {
+      pressTimer = null;
+      longPressed = true;
+      mark(e, 2);
+      if (navigator.vibrate) navigator.vibrate(15);
+    }, 380);
+  });
+  board.addEventListener('pointermove', function (ev) {
+    if (pressTimer && Math.abs(ev.clientX - pressX) + Math.abs(ev.clientY - pressY) > 12) cancelPress();
+  });
+  board.addEventListener('pointerup', cancelPress);
+  board.addEventListener('pointercancel', cancelPress);
+
+  board.addEventListener('click', function (ev) {
+    if (longPressed) { longPressed = false; return; }
+    mark(edgeFromEvent(ev), 1);
+  });
+  board.addEventListener('contextmenu', function (ev) {
+    ev.preventDefault();
+    if (lastPointer !== 'mouse') return;   // 觸控的長按已由上面處理
+    mark(edgeFromEvent(ev), 2);
+  });
+
+  document.getElementById('btnUndo').addEventListener('click', function () {
+    if (!history.length || finished) return;
+    var h = history.pop();
+    state[h[0]] = h[1];
+    clearMarks();
+    render();
+    setStatus('');
+  });
+
+  document.getElementById('btnCheck').addEventListener('click', function () {
+    if (!puzzle) return;
+    clearMarks();
+    if (Slitherlink.checkAnswer(puzzle.n, puzzle.clues, state)) {
+      finished = true;
+      setStatus('✔ 正確!恭喜過關 🎉 點上方的大小或難度可以再玩一題。', 'ok');
+    } else {
+      setStatus('✘ 失敗,答案還不對,再檢查看看。', 'bad');
+    }
+  });
+
+  document.getElementById('btnHint').addEventListener('click', function () {
+    if (!puzzle || finished) return;
+    clearMarks();
+    var sol = puzzle.solution, missing = [], near = [], wrong = [], e;
+    for (e = 0; e < topo.E; e++) {
+      if (sol[e] === 1 && state[e] !== 1) missing.push(e);
+      else if (sol[e] !== 1 && state[e] === 1) wrong.push(e);
+    }
+    if (!missing.length && !wrong.length) {
+      setStatus('線都畫對了,按「對答案」吧!', 'hint');
+      return;
+    }
+    if (!missing.length) {
+      // 正確的線都有了,只剩多畫的:指出一條
+      e = wrong[Math.floor(Math.random() * wrong.length)];
+      edgeEls[e].classList.add('wrong');
+      setStatus('提示:紅色閃爍的這條線是多的。', 'hint');
+      return;
+    }
+    // 優先提示能接在玩家已畫對的線旁邊的那一條
+    for (var i = 0; i < missing.length; i++) {
+      var ev = topo.edgeVerts[missing[i]], touch = false;
+      for (var q = 0; q < 2 && !touch; q++) {
+        var ve = topo.vertEdges[ev[q]];
+        for (var j = 0; j < ve.length; j++) {
+          if (state[ve[j]] === 1 && sol[ve[j]] === 1) { touch = true; break; }
+        }
+      }
+      if (touch) near.push(missing[i]);
+    }
+    var pool = near.length ? near : missing;
+    e = pool[Math.floor(Math.random() * pool.length)];
+    setEdge(e, 1);
+    render();
+    edgeEls[e].classList.add('hinted');
+    setStatus('提示:已幫你畫上一條正確的線(橘色)。', 'hint');
+  });
+
+  newGame();
+})();
+</script>
+</body>
+</html>
