@@ -8,7 +8,7 @@
  */
 'use strict';
 
-var VERSION = 'games-v1';
+var VERSION = 'games-v2';
 
 var FILES = [
   'index.html',
@@ -26,7 +26,9 @@ var FILES = [
   'app/junqi/themes/classic-gold.png',
   'app/junqi/themes/outline.png',
   'app/junqi/themes/rounded.png',
-  'app/junqi/themes/duotone.png'
+  'app/junqi/themes/duotone.png',
+  'app/walls/index.html',
+  'app/walls/engine.js'
 ];
 
 self.addEventListener('install', function (event) {

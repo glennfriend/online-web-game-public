@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>圍牆棋</title>
+<style>
+  :root {
+    --bg: #f4f1ea;
+    --panel: #fffdf8;
+    --ink: #22252b;
+    --muted: #8a8d94;
+    --border: #d9d4c7;
+    --accent: #2f6fde;
+    --felt: #ecdfc4;
+    --cell: #f3e9d2;
+    --grid: #cdbb94;
+    --frame: #6e5a3a;
+    --p0: #2f6fde;
+    --p1: #d0402b;
+    --p2: #2e8b57;
+    --p3: #8e44ad;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17191e;
+      --panel: #20232a;
+      --ink: #e8e9ec;
+      --muted: #8e929b;
+      --border: #363a44;
+      --accent: #6ea0ff;
+      --felt: #2b2823;
+      --cell: #33302a;
+      --grid: #4d473d;
+      --frame: #a89470;
+      --p0: #5b93ff;
+      --p1: #ff6b57;
+      --p2: #4fc98a;
+      --p3: #c07be0;
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Segoe UI", "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", sans-serif;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 8px 8px calc(10px + env(safe-area-inset-bottom));
+  }
+  /* 手機優先:寬度填滿螢幕;桌機則讓棋盤不超過視窗高度 */
+  main { width: 100%; max-width: min(480px, max(300px, calc(100vh - 330px))); }
+  header { display: flex; align-items: baseline; justify-content: space-between; height: 32px; }
+  header a { color: var(--muted); text-decoration: none; font-size: 14px; }
+  header a:hover { color: var(--accent); }
+  h1 { margin: 0; font-size: 20px; letter-spacing: 2px; }
+
+  .row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .row > .label { font-size: 13px; color: var(--muted); flex: none; }
+  .seg { display: flex; flex: 1; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--panel); }
+  .seg button {
+    border: 0; background: transparent; color: var(--ink);
+    flex: 1; padding: 0; min-height: 36px; font: inherit; font-size: 14px; cursor: pointer;
+    border-right: 1px solid var(--border); white-space: nowrap;
+  }
+  .seg button:last-child { border-right: 0; }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+
+  /* 玩家列:顏色、目前圍到的格數、破牆是否還在 */
+  #players { display: flex; gap: 6px; margin: 8px 0; }
+  .chip {
+    flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 5px;
+    padding: 5px 4px; border-radius: 8px; border: 2px solid transparent; background: var(--panel);
+    font-size: 14px; font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .chip .dot { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+  .chip b { font-size: 16px; }
+  .chip small { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 3px; }
+  .chip.turn { border-color: currentColor; }
+  .chip.win { border-color: currentColor; background: color-mix(in srgb, currentColor 14%, var(--panel)); }
+  .chip span.txt { color: var(--ink); }
+  .c0 { color: var(--p0); } .c1 { color: var(--p1); } .c2 { color: var(--p2); } .c3 { color: var(--p3); }
+  .c0 .dot, .pc.c0 { background: var(--p0); } .c1 .dot, .pc.c1 { background: var(--p1); }
+  .c2 .dot, .pc.c2 { background: var(--p2); } .c3 .dot, .pc.c3 { background: var(--p3); }
+
+  #boardBox { position: relative; }
+  svg#board { display: block; width: 100%; height: auto; touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  .felt { fill: var(--felt); stroke: var(--frame); stroke-width: 3; }
+  .cell { fill: var(--cell); stroke: var(--grid); stroke-width: 0.6; transition: fill 0.3s; }
+  .cell.t0 { fill: color-mix(in srgb, var(--p0) 30%, var(--cell)); }
+  .cell.t1 { fill: color-mix(in srgb, var(--p1) 30%, var(--cell)); }
+  .cell.t2 { fill: color-mix(in srgb, var(--p2) 30%, var(--cell)); }
+  .cell.t3 { fill: color-mix(in srgb, var(--p3) 30%, var(--cell)); }
+  .hit { fill: transparent; cursor: pointer; }
+  .wall { stroke-width: 6; stroke-linecap: round; pointer-events: none; }
+  .w0 { stroke: var(--p0); } .w1 { stroke: var(--p1); } .w2 { stroke: var(--p2); } .w3 { stroke: var(--p3); }
+  .wall.fresh { animation: grow 0.25s ease-out; }
+  .wall-core { stroke: #fff; stroke-width: 1.6; stroke-linecap: round; opacity: 0.85; pointer-events: none; }
+  @keyframes grow { from { stroke-width: 14; opacity: 0.2; } }
+  .cand { stroke-width: 6; stroke-linecap: round; opacity: 0.45; pointer-events: none; animation: blink 0.9s ease-in-out infinite alternate; }
+  .wall.gone { opacity: 0.22; stroke-dasharray: 2 9; }
+  @keyframes blink { to { opacity: 0.85; } }
+  .dest { opacity: 0.6; pointer-events: none; }
+  .smash { fill: none; stroke-width: 2.5; stroke-dasharray: 3 3; pointer-events: none; }
+  .f0 { fill: var(--p0); } .f1 { fill: var(--p1); } .f2 { fill: var(--p2); } .f3 { fill: var(--p3); }
+  .s0 { stroke: var(--p0); } .s1 { stroke: var(--p1); } .s2 { stroke: var(--p2); } .s3 { stroke: var(--p3); }
+
+  /* 棋子疊在棋盤上,移動時用 CSS 過場滑過去 */
+  #pieces { position: absolute; inset: 0; pointer-events: none; }
+  .pc {
+    position: absolute; border-radius: 50%; transform: translate(-50%, -50%);
+    border: 2px solid rgba(0, 0, 0, 0.25); box-shadow: 0 2px 0 rgba(0, 0, 0, 0.3);
+    transition: left 0.24s cubic-bezier(0.2, 0.7, 0.3, 1), top 0.24s cubic-bezier(0.2, 0.7, 0.3, 1), transform 0.15s, opacity 0.2s;
+  }
+  .pc.sq { border-radius: 20%; }
+  .pc.sel { transform: translate(-50%, -50%) scale(1.14); border-color: #fff; box-shadow: 0 4px 0 rgba(0, 0, 0, 0.3); z-index: 2; }
+  .pc.idle { opacity: 0.45; }
+  .pc.new { animation: drop 0.22s ease-out; }
+  @keyframes drop { from { transform: translate(-50%, -50%) scale(0.3); opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) {
+    .pc { transition: opacity 0.15s; }
+    .pc.new, .wall.fresh, .cand { animation: none; }
+  }
+
+  #status { min-height: 22px; margin: 8px 2px; font-size: 14px; line-height: 22px; color: var(--muted); }
+  #status b { font-weight: 600; }
+
+  .actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; min-height: 48px; }
+  .actions button {
+    border: 1px solid var(--border); background: var(--panel); color: var(--ink);
+    border-radius: 10px; padding: 0 4px; min-height: 48px; font: inherit; font-size: 16px; cursor: pointer;
+    touch-action: manipulation;
+  }
+  .actions button:active { transform: scale(0.97); }
+  .actions button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .actions button.full { grid-column: 1 / -1; }
+  .actions button[aria-pressed="true"] { border-color: var(--ink); border-width: 2px; }
+  .actions button[hidden] { display: none; }
+
+  details { font-size: 14px; color: var(--muted); line-height: 1.7; margin-top: 10px; }
+  details summary { cursor: pointer; color: var(--ink); }
+  details ul { margin: 6px 0 0; padding-left: 20px; }
+  .shape { display: inline-block; width: 12px; height: 12px; background: var(--muted); vertical-align: -1px; margin: 0 2px; }
+  .shape.sq { border-radius: 20%; } .shape.rd { border-radius: 50%; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>圍牆棋</h1>
+    <a href="../index.html">← 列表</a>
+  </header>
+
+  <div class="row">
+    <span class="label">人數</span>
+    <div class="seg" id="optPlayers">
+      <button data-v="2">2</button><button data-v="3">3</button><button data-v="4">4</button>
+    </div>
+    <span class="label">對手</span>
+    <div class="seg" id="optRival">
+      <button data-v="ai">電腦</button><button data-v="human">真人</button>
+    </div>
+  </div>
+  <div class="row">
+    <span class="label">破牆</span>
+    <div class="seg" id="optHammer">
+      <button data-v="off">不使用</button><button data-v="on">每人一次</button>
+    </div>
+  </div>
+
+  <div id="players"></div>
+
+  <div id="boardBox">
+    <svg id="board" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div id="pieces"></div>
+  </div>
+
+  <div id="status" role="status" aria-live="polite"></div>
+
+  <div class="actions">
+    <button id="btnBack" class="full" hidden>重選</button>
+    <button id="btnAgain" class="primary full" hidden>再玩一次</button>
+  </div>
+
+  <details>
+    <summary>玩法說明</summary>
+    <ul>
+      <li><strong>目標</strong>:用牆把棋盤隔開,圍到最多格子的人贏。</li>
+      <li><strong>每一手做兩件事</strong>:先選一顆自己的棋移動(一定要動,不能留在原地),然後在那顆棋所在格子的四邊中,選一邊蓋一道牆。</li>
+      <li><strong>兩種棋</strong>:<span class="shape sq"></span>方棋直走 1 或 2 格,不能轉彎;<span class="shape rd"></span>圓棋走 1 格,之後可以向左或向右轉再走 1 格,不能直走 2 格。都不能穿牆,也不能穿過別的棋。</li>
+      <li><strong>擺棋</strong>:2 人各 4 顆(2 方 2 圓),圓棋開局就固定在斜對角,方棋照 先、後、後、先 的順序自己擺。3 人、4 人各 2 顆(1 方 1 圓),先輪流擺方棋,再反過來的順序擺圓棋。</li>
+      <li><strong>領地</strong>:一塊被牆圍起來的區域裡,如果只剩一個人的棋,那一塊就是他的,會染上他的顏色。</li>
+      <li><strong>結束</strong>:所有人的棋都被隔開時結束。比誰的格子多;一樣多就比誰最大的一塊比較大。沒有棋的區域不算任何人的。輪到的人沒有棋能動就跳過。</li>
+      <li><strong>破牆</strong>(可選):每人整局一次。移動時可以打掉擋在路上的一道牆穿過去,走完一樣要蓋一道牆。選棋後,<em>虛線圈</em>的格子就是要用破牆才到得了的地方。</li>
+      <li><strong>對手</strong>:選「電腦」時你是藍色,其他都是電腦;選「真人」時大家輪流用同一支手機。</li>
+      <li>想重來:點上方任何一個選項,就會重新開始。</li>
+    </ul>
+  </details>
+</main>
+
+<script src="engine.js"></script>
+<script>
+(function () {
+  'use strict';
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  var C = 48, M = 10;
+  var NAMES = ['藍', '紅', '綠', '紫'];
+  var DR = [-1, 1, 0, 0], DC = [0, 0, -1, 1];
+
+  var $ = function (id) { return document.getElementById(id); };
+  var board = $('board'), piecesEl = $('pieces'), playersEl = $('players'), statusEl = $('status');
+  var btnBack = $('btnBack'), btnAgain = $('btnAgain');
+  var KIND = ['方棋', '圓棋'];
+
+  var prefs = { players: 2, rival: 'ai', hammer: 'off' };
+  try {
+    var saved = JSON.parse(localStorage.getItem('walls.prefs') || 'null');
+    if (saved && Walls.SETUPS[saved.players] && (saved.rival === 'ai' || saved.rival === 'human') &&
+        (saved.hammer === 'on' || saved.hammer === 'off')) prefs = saved;
+  } catch (e) { /* 沒有 localStorage 也能玩 */ }
+
+  var state = null, n = 7, BW = 0, gen = 0;
+  // 玩家這一手進行到哪:pick 選棋 → dest 選目的地 → wall 選牆;busy = 電腦或動畫進行中
+  var ui = { step: 'busy', sel: -1, moves: [], move: null };
+  var lastWall = null;      // 最近蓋的牆 { pos, dir }
+  var cellEls = [], pieceEls = [], layerWalls, layerMarks, layerHits;
+
+  function el(name, attrs, parent) {
+    var node = document.createElementNS(SVGNS, name);
+    for (var k in attrs) node.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(node);
+    return node;
+  }
+  function later(fn, ms) {
+    var g = gen;
+    setTimeout(function () { if (g === gen) fn(); }, ms);
+  }
+  function isAI(p) { return prefs.rival === 'ai' && p > 0; }
+  function label(p) { return '<b class="c' + p + '">' + NAMES[p] + '</b>'; }
+  function setStatus(html) { statusEl.innerHTML = html; }
+  function cx(pos) { return M + (pos % n) * C + C / 2; }
+  function cy(pos) { return M + Math.floor(pos / n) * C + C / 2; }
+  /** 某格某一邊的線段座標(兩端各縮一點,牆和牆之間才不會黏在一起) */
+  function edgeLine(pos, dir) {
+    var x = M + (pos % n) * C, y = M + Math.floor(pos / n) * C, g = 5;
+    if (dir === 0) return [x + g, y, x + C - g, y];
+    if (dir === 1) return [x + g, y + C, x + C - g, y + C];
+    if (dir === 2) return [x, y + g, x, y + C - g];
+    return [x + C, y + g, x + C, y + C - g];
+  }
+
+  /* ---------- 選項 ---------- */
+  function bindOption(id, key, parse) {
+    $(id).addEventListener('click', function (ev) {
+      var b = ev.target.closest('button');
+      if (!b) return;
+      prefs[key] = parse ? parse(b.dataset.v) : b.dataset.v;
+      newGame();
+    });
+  }
+  bindOption('optPlayers', 'players', Number);
+  bindOption('optRival', 'rival');
+  bindOption('optHammer', 'hammer');
+  function syncOptions() {
+    [['optPlayers', 'players'], ['optRival', 'rival'], ['optHammer', 'hammer']].forEach(function (o) {
+      Array.prototype.forEach.call($(o[0]).children, function (b) {
+        b.setAttribute('aria-pressed', String(b.dataset.v === String(prefs[o[1]])));
+      });
+    });
+  }
+
+  /* ---------- 開局 ---------- */
+  function newGame() {
+    gen++;
+    syncOptions();
+    try { localStorage.setItem('walls.prefs', JSON.stringify(prefs)); } catch (e) {}
+    state = Walls.newGame(prefs.players, prefs.hammer === 'on');
+    n = state.n;
+    BW = n * C + M * 2;
+    lastWall = null;
+    buildBoard();
+    btnAgain.hidden = true;
+    next();
+  }
+
+  function buildBoard() {
+    board.setAttribute('viewBox', '0 0 ' + BW + ' ' + BW);
+    while (board.firstChild) board.removeChild(board.firstChild);
+    piecesEl.innerHTML = '';
+    cellEls = []; pieceEls = [];
+    el('rect', { x: M - 3, y: M - 3, width: n * C + 6, height: n * C + 6, rx: 6, 'class': 'felt' }, board);
+    var cells = el('g', {}, board), pos;
+    for (pos = 0; pos < n * n; pos++) {
+      cellEls.push(el('rect', { x: M + (pos % n) * C, y: M + Math.floor(pos / n) * C, width: C, height: C, 'class': 'cell' }, cells));
+    }
+    layerWalls = el('g', {}, board);
+    layerMarks = el('g', {}, board);
+    layerHits = el('g', {}, board);
+    for (pos = 0; pos < n * n; pos++) {
+      el('rect', { x: M + (pos % n) * C, y: M + Math.floor(pos / n) * C, width: C, height: C, 'class': 'hit', 'data-pos': pos }, layerHits);
+    }
+  }
+
+  /* ---------- 畫面 ---------- */
+  function render() {
+    var reg = Walls.regions(state), sc = Walls.scores(state, reg), pos, d, p, i;
+
+    // 領地染色
+    for (pos = 0; pos < n * n; pos++) {
+      // 擺棋階段還沒有領地可言,不染色
+      var owner = state.phase === 'place' ? -1 : reg.list[reg.id[pos]].owner;
+      cellEls[pos].setAttribute('class', 'cell' + (owner >= 0 ? ' t' + owner : ''));
+    }
+
+    // 牆
+    while (layerWalls.firstChild) layerWalls.removeChild(layerWalls.firstChild);
+    for (pos = 0; pos < n * n; pos++) {
+      for (d = 1; d <= 3; d += 2) {            // 每條邊只從上方 / 左方那一格畫一次(下、右)
+        var e = Walls.edge(state, pos, d);
+        if (e.border || e.arr[e.idx] < 0) continue;
+        var L = edgeLine(pos, d);
+        var fresh = lastWall && sameEdge(lastWall.pos, lastWall.dir, pos, d);
+        var gone = ui.move && ui.move.brk && sameEdge(ui.move.brk.pos, ui.move.brk.dir, pos, d);
+        el('line', { x1: L[0], y1: L[1], x2: L[2], y2: L[3], 'class': 'wall w' + e.arr[e.idx] + (fresh ? ' fresh' : '') + (gone ? ' gone' : '') }, layerWalls);
+        if (fresh) el('line', { x1: L[0], y1: L[1], x2: L[2], y2: L[3], 'class': 'wall-core' }, layerWalls);
+      }
+    }
+
+    // 棋子
+    var movable = state.phase === 'play' && !isAI(state.turn) ? Walls.movablePieces(state, state.turn) : [];
+    for (i = 0; i < state.pieces.length; i++) {
+      var pc = state.pieces[i], node = pieceEls[i];
+      if (!node) {
+        node = document.createElement('div');
+        node.style.width = node.style.height = (C * 0.64 / BW * 100) + '%';
+        piecesEl.appendChild(node);
+        pieceEls[i] = node;
+        node._new = true;
+      }
+      var at = (ui.move && i === ui.sel) ? ui.move.dest : pc.pos;
+      node.style.left = (cx(at) / BW * 100) + '%';
+      node.style.top = (cy(at) / BW * 100) + '%';
+      var cls = 'pc c' + pc.player + (pc.kind === Walls.SQUARE ? ' sq' : '');
+      if (node._new) { cls += ' new'; node._new = false; }
+      if (i === ui.sel) cls += ' sel';
+      // 輪到真人選棋時,不能動的自己的棋變淡
+      if (ui.step === 'pick' && pc.player === state.turn && movable.indexOf(i) < 0) cls += ' idle';
+      node.className = cls;
+    }
+
+    renderMarks();
+
+    // 玩家列
+    var html = '';
+    for (p = 0; p < state.players; p++) {
+      var klass = 'chip c' + p;
+      if (state.phase === 'over') { if (state.over.winners.indexOf(p) >= 0) klass += ' win'; }
+      else if (p === state.turn) klass += ' turn';
+      html += '<div class="' + klass + '"><span class="dot"></span><span class="txt">' + NAMES[p] + '</span><b>' + (state.phase === 'place' ? 0 : sc.total[p]) + '</b>' +
+        (state.hammers[p] > 0 ? '<small>破牆</small>' : '') + '</div>';
+    }
+    playersEl.innerHTML = html;
+  }
+
+  function sameEdge(p1, d1, p2, d2) {
+    var a = Walls.edge(state, p1, d1), b = Walls.edge(state, p2, d2);
+    return a.arr === b.arr && a.idx === b.idx;
+  }
+
+  function renderMarks() {
+    var i, me = state.turn;
+    while (layerMarks.firstChild) layerMarks.removeChild(layerMarks.firstChild);
+    Array.prototype.forEach.call(layerHits.querySelectorAll('.edge-hit'), function (x) { layerHits.removeChild(x); });
+
+    if (ui.step === 'dest') {
+      for (i = 0; i < ui.moves.length; i++) {
+        var p = ui.moves[i].dest;
+        // 虛線圈 = 要用破牆才到得了
+        if (ui.moves[i].brk) el('circle', { cx: cx(p), cy: cy(p), r: 9, 'class': 'smash s' + me }, layerMarks);
+        else el('circle', { cx: cx(p), cy: cy(p), r: 6, 'class': 'dest f' + me }, layerMarks);
+      }
+    }
+    if (ui.step === 'wall') {
+      var at = ui.move.dest;
+      Walls.wallChoices(state, ui.move).forEach(function (d) {
+        var L = edgeLine(at, d);
+        el('line', { x1: L[0], y1: L[1], x2: L[2], y2: L[3], 'class': 'cand s' + me }, layerMarks);
+        // 牆的點擊範圍比看到的粗很多,手指才好點
+        var horizontal = d < 2, T = 15;
+        el('rect', {
+          x: horizontal ? L[0] : L[0] - T, y: horizontal ? L[1] - T : L[1],
+          width: horizontal ? L[2] - L[0] : T * 2, height: horizontal ? T * 2 : L[3] - L[1],
+          'class': 'hit edge-hit', 'data-dir': d
+        }, layerHits);
+      });
+    }
+  }
+
+  function showButtons() {
+    var human = state.phase === 'play' && !isAI(state.turn);
+    btnBack.hidden = !(human && (ui.step === 'wall' || ui.step === 'dest'));
+  }
+
+  /* ---------- 流程 ---------- */
+  function next() {
+    ui = { step: 'busy', sel: -1, moves: [], move: null };
+    if (state.phase === 'over') {
+      render(); showButtons();
+      var sc = state.over.scores, parts = [], used = 0;
+      for (var p = 0; p < state.players; p++) { parts.push(label(p) + ' ' + sc[p]); used += sc[p]; }
+      var text = '結束:' + parts.join('、');
+      if (n * n - used > 0) text += '、無人 ' + (n * n - used);
+      var w = state.over.winners;
+      if (w.length > 1) text += '。平手!';
+      else if (prefs.rival === 'ai') text += w[0] === 0 ? '。你贏了!' : '。' + label(w[0]) + '贏了。';
+      else text += '。' + label(w[0]) + '贏了!';
+      setStatus(text);
+      btnAgain.hidden = false;
+      return;
+    }
+    var me = state.turn;
+    if (isAI(me)) {
+      render(); showButtons();
+      setStatus(label(me) + '思考中…');
+      later(aiTurn, 550);
+      return;
+    }
+    if (state.phase === 'place') {
+      ui.step = 'place';
+      render(); showButtons();
+      setStatus(label(me) + ':點一個空格放' + KIND[state.placeKind[state.placed]]);
+    } else {
+      ui.step = 'pick';
+      render(); showButtons();
+      setStatus(label(me) + ':選一顆自己的棋');
+    }
+  }
+
+  function aiTurn() {
+    if (state.phase === 'place') {
+      Walls.place(state, Walls.choosePlacement(state));
+      next();
+      return;
+    }
+    var a = Walls.chooseAction(state), me = state.turn;
+    // 演給人看:先選棋,滑過去,再蓋牆
+    ui = { step: 'busy', sel: a.piece, moves: [], move: a.move };
+    render();
+    later(function () {
+      commit(a.piece, a.move, a.dir, me);
+    }, 420);
+  }
+
+  function commit(piece, move, dir, who) {
+    Walls.act(state, piece, move, dir);
+    lastWall = { pos: move.dest, dir: dir };
+    if (move.brk) flash(label(who) + '打穿了一道牆。');
+    next();
+  }
+  var flashText = '';
+  function flash(html) { flashText = html; }
+
+  /* ---------- 玩家操作 ---------- */
+  function pick(i) {
+    var list = Walls.moves(state, i);
+    if (!list.length) return false;
+    ui = { step: 'dest', sel: i, moves: list, move: null };
+    render(); showButtons();
+    var needBreak = list.some(function (m) { return m.brk; });
+    setStatus(label(state.turn) + ':點要走到的格子' + (needBreak ? '(虛線圈 = 用掉破牆)' : ''));
+    return true;
+  }
+
+  function tapCell(pos) {
+    if (state.phase === 'over' || isAI(state.turn)) return;
+    var me = state.turn;
+    if (ui.step === 'place') {
+      if (state.occ[pos] >= 0) return;
+      Walls.place(state, pos);
+      next();
+      return;
+    }
+    // 點自己的另一顆棋:改選那一顆
+    var idx = -1;
+    for (var i = 0; i < state.pieces.length; i++) if (state.pieces[i].pos === pos && state.pieces[i].player === me) idx = i;
+    var movable = Walls.movablePieces(state, me);
+    if (ui.step === 'pick') {
+      if (idx >= 0 && movable.indexOf(idx) >= 0) pick(idx);
+      else if (idx >= 0) setStatus(label(me) + ':這顆棋動不了,換一顆');
+      return;
+    }
+    if (ui.step === 'dest') {
+      var chosen = null;
+      ui.moves.forEach(function (m) { if (m.dest === pos) chosen = m; });
+      if (chosen) {
+        ui.step = 'wall'; ui.move = chosen;
+        render(); showButtons();
+        setStatus(label(me) + (chosen.brk ? ':打穿牆了,點一邊蓋牆' : ':點一邊蓋牆'));
+        return;
+      }
+      if (idx >= 0 && idx !== ui.sel && movable.indexOf(idx) >= 0) { pick(idx); return; }
+      return;
+    }
+    if (ui.step === 'wall') {
+      if (idx >= 0 && idx !== ui.sel && movable.indexOf(idx) >= 0) pick(idx);
+    }
+  }
+
+  function tapEdge(dir) {
+    if (ui.step !== 'wall') return;
+    commit(ui.sel, ui.move, dir, state.turn);
+  }
+
+  board.addEventListener('click', function (ev) {
+    var t = ev.target;
+    if (!t.classList || !t.classList.contains('hit')) return;
+    if (t.classList.contains('edge-hit')) tapEdge(+t.getAttribute('data-dir'));
+    else tapCell(+t.getAttribute('data-pos'));
+  });
+
+  btnBack.addEventListener('click', function () {
+    if (ui.step === 'wall') pick(ui.sel);
+    else if (ui.step === 'dest') next();
+  });
+  btnAgain.addEventListener('click', newGame);
+
+  // 破牆的訊息要蓋過下一位的提示一下子
+  var baseSetStatus = setStatus;
+  setStatus = function (html) {
+    if (flashText) { html = flashText + ' ' + html; flashText = ''; }
+    baseSetStatus(html);
+  };
+
+  newGame();
+})();
+</script>
+<script>
+// 用網址開啟時,把遊戲存到裝置上,之後沒網路也能玩(直接開檔案時不需要)
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  navigator.serviceWorker.register('../../sw.js').catch(function () { /* 不支援就照常使用 */ });
+}
+</script>
+</body>
+</html>
