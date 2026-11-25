@@ -150,7 +150,6 @@
 <main>
   <header>
     <h1>德州撲克<small>Texas Hold'em</small></h1>
-    <a href="../index.html">← 遊戲列表</a>
   </header>
 
   <div class="table">
@@ -192,7 +191,10 @@
       <li>每一輪可以:<strong>棄牌</strong>(放棄這局)、<strong>過牌 / 跟注</strong>(補到和別人一樣多)、<strong>加注</strong>(提高賭注)。</li>
       <li>加注:按一下打開金額選擇,調好後再按一次送出。</li>
       <li>每人 1000 籌碼起始,盲注固定 10 / 20。籌碼輸光就出局。純屬遊戲籌碼,不涉及金錢。</li>
-      <li>對手固定是 3 個電腦玩家。想中途重來:重新整理頁面。</li>
+      <li>對手固定是 3 個電腦玩家,每一場從下面 6 種性格裡抽 3 個,名字就是他的打法,這一場沒抽到的下一場就會出現。分類照撲克界慣用的兩條軸:玩多少牌(緊 / 鬆)和怎麼玩(弱 / 兇)。想中途重來:重新整理頁面。</li>
+    </ul>
+    <h2 style="font-size:14px;color:var(--ink);margin:10px 0 4px">對手的性格</h2>
+    <ul id="personaList">
     </ul>
     <p style="margin:8px 0 0">牌型由大到小:</p>
     <ol>
@@ -253,11 +255,30 @@
   }
   var inHand = function (p) { return !p.out; };
 
+  /* ---------- 對手的性格 ---------- */
+  // 每次開新的一場抽三個;抽過的先不再出現,全部輪過一遍才重新洗牌
+  function drawPersonas(count) {
+    var pool = [];
+    try { pool = JSON.parse(localStorage.getItem('holdem.pool') || '[]'); } catch (e) {}
+    if (!Array.isArray(pool)) pool = [];
+    pool = pool.filter(function (i) { return Holdem.PERSONAS[i]; });
+    var picked = [];
+    while (picked.length < count) {
+      if (!pool.length) {
+        // 重新洗一副,但不要和這一場已經抽到的重複
+        for (var i = 0; i < Holdem.PERSONAS.length; i++) if (picked.indexOf(i) < 0) pool.push(i);
+      }
+      picked.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+    }
+    try { localStorage.setItem('holdem.pool', JSON.stringify(pool)); } catch (e) {}
+    return picked.map(function (i) { return Holdem.PERSONAS[i]; });
+  }
+
   /* ---------- 開局 ---------- */
   function newGame() {
     gen++;
     players = [{ name: '你', human: true }];
-    for (var i = 0; i < OPPONENTS; i++) players.push({ name: '電腦 ' + 'ABC'[i], human: false, style: 0.85 + Math.random() * 0.3 });
+    drawPersonas(OPPONENTS).forEach(function (ps) { players.push({ name: ps.name, human: false, persona: ps }); });
     players.forEach(function (p) {
       p.chips = START; p.out = false; p.hole = []; p.folded = false; p.allIn = false;
       p.bet = 0; p.total = 0; p.acted = false; p.show = false; p.note = ''; p.won = 0;
@@ -279,6 +300,7 @@
       if (p.chips <= 0) p.out = true;
       p.hole = []; p.folded = false; p.allIn = false; p.bet = 0; p.total = 0;
       p.acted = false; p.show = false; p.note = ''; p.won = 0;
+      p.raisedPre = false;
     });
     var left = players.filter(inHand);
     if (players[0].out || left.length < 2) {
@@ -353,6 +375,7 @@
   function act(p, type, raiseTo) {
     hideActions();
     var toCall = currentBet - p.bet;
+    if (type === 'raise' && street === 0) p.raisedPre = true;
     if (type === 'fold') {
       p.folded = true; p.note = '棄牌';
     } else if (type === 'call') {
@@ -379,33 +402,12 @@
 
   /* ---------- 電腦對手 ---------- */
   function botAct(p) {
-    var others = alive().length - 1;
-    var e = Holdem.equity(p.hole, board, 1, 160);     // 對上一個隨機對手的勝率
-    var toCall = Math.min(currentBet - p.bet, p.chips);
-    var total = pot(), r = Math.random(), crowd = 0.04 * (others - 1);
-    var strong = 0.66 / p.style + crowd, monster = 0.8 / p.style + crowd;
-    var stack = p.bet + p.chips;
-    function raiseBy(frac) {
-      var size = Math.max(minRaise, Math.round(total * frac / 10) * 10);
-      return Math.min(stack, currentBet + size);
-    }
-    var mayRaise = raises < 3 && stack > currentBet + minRaise;
-
-    if (toCall <= 0) {
-      if (mayRaise && (e > strong || (e > 0.5 && r < 0.3) || r < 0.06)) {
-        act(p, 'raise', raiseBy(0.5 + Math.random() * 0.3));
-      } else act(p, 'call');
-      return;
-    }
-    var odds = toCall / (total + toCall);
-    if (mayRaise && (e > monster || (e > strong && r < 0.3))) {
-      act(p, 'raise', raiseBy(0.6 + Math.random() * 0.4));
-      return;
-    }
-    var need = odds + 0.12 + crowd;
-    if (toCall > p.chips * 0.4) need = Math.max(need, 0.6);   // 要押上大半籌碼時謹慎一點
-    if (e > need) act(p, 'call');
-    else act(p, 'fold');
+    var choice = Holdem.decide({
+      persona: p.persona, hole: p.hole, board: board, street: street,
+      toCall: Math.min(currentBet - p.bet, p.chips), currentBet: currentBet, minRaise: minRaise, raises: raises,
+      pot: pot(), bet: p.bet, chips: p.chips, others: alive().length - 1, raisedPre: p.raisedPre
+    });
+    act(p, choice.type, choice.to);
   }
 
   /* ---------- 結算 ---------- */
@@ -581,6 +583,11 @@
     startHand();
     if (gameOver) { $('btnNext').textContent = '重新開始'; actNext.hidden = false; }
   });
+
+  // 玩法說明裡的性格列表
+  $('personaList').innerHTML = Holdem.PERSONAS.map(function (ps) {
+    return '<li><strong>' + ps.name + '</strong>(' + ps.type + '):' + ps.desc + '</li>';
+  }).join('');
 
   newGame();
 })();

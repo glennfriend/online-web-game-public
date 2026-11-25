@@ -8,7 +8,7 @@
  */
 'use strict';
 
-var VERSION = 'games-v2';
+var VERSION = 'games-v15';
 
 var FILES = [
   'index.html',
@@ -27,6 +27,9 @@ var FILES = [
   'app/junqi/themes/outline.png',
   'app/junqi/themes/rounded.png',
   'app/junqi/themes/duotone.png',
+  'app/junqi4/index.html',
+  'app/junqi4/engine.js',
+  'app/junqi4/themes/rounded.png',
   'app/walls/index.html',
   'app/walls/engine.js'
 ];

@@ -11,7 +11,8 @@
 - [猜數字 1A2B](https://glennfriend.github.io/online-web-game-public/app/1a2b/) — 3 ~ 5 位不重複數字。
 - [德州撲克 Texas Hold'em](https://glennfriend.github.io/online-web-game-public/app/holdem/) — 對戰 3 個電腦對手,純遊戲籌碼。
 - [兩人軍棋](https://glennfriend.github.io/online-web-game-public/app/junqi/) — 陸軍棋布陣暗棋,和電腦對戰。
-- [圍牆棋](https://glennfriend.github.io/online-web-game-public/app/walls/) — 走棋、蓋牆、圍地盤。2 ~ 4 人,對電腦或真人輪流,可選破牆道具。
+- [四人軍棋](https://glennfriend.github.io/online-web-game-public/app/junqi4/) — 四國軍棋 2 對 2,你和對面的電腦一隊。棋盤針對手機重新設計。
+- [圍牆棋](https://glennfriend.github.io/online-web-game-public/app/walls/) — 走棋、蓋牆、圍地盤。2 ~ 4 人,和電腦對戰,可選破牆道具。
 
 ## 怎麼玩
 

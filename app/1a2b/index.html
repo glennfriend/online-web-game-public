@@ -46,6 +46,14 @@
   header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
   header a { color: var(--muted); text-decoration: none; font-size: 14px; }
   header a:hover { color: var(--accent); }
+  header nav { display: flex; gap: 16px; }
+  header a[hidden], #setup[hidden], #game[hidden] { display: none; }
+  #setup { margin-bottom: 10px; }
+  #btnStart {
+    width: 100%; min-height: 48px; margin-top: 4px; border: 1px solid var(--accent); border-radius: 10px;
+    background: var(--accent); color: #fff; font: inherit; font-size: 16px; cursor: pointer; touch-action: manipulation;
+  }
+  #btnStart:active { transform: scale(0.98); }
   h1 { margin: 0; font-size: 22px; letter-spacing: 2px; }
   h1 small { font-size: 13px; font-weight: 400; color: var(--muted); letter-spacing: 0; margin-left: 6px; }
 
@@ -109,9 +117,12 @@
 <main>
   <header>
     <h1>猜數字<small>1A2B</small></h1>
-    <a href="../index.html">← 遊戲列表</a>
+    <nav>
+      <a href="#" id="lnkSetup" hidden>選項</a>
+    </nav>
   </header>
 
+  <div id="setup">
   <div class="row">
     <span class="label">位數</span>
     <div class="seg" id="lengths">
@@ -120,7 +131,10 @@
       <button data-len="5">5</button>
     </div>
   </div>
+  <button id="btnStart">開始遊戲</button>
+  </div>
 
+  <div id="game" hidden>
   <div id="slots" aria-label="目前輸入"></div>
 
   <div id="pad">
@@ -133,6 +147,7 @@
   <div id="status" role="status" aria-live="polite"></div>
 
   <ol id="history"></ol>
+  </div>
 
   <details>
     <summary>玩法說明</summary>
@@ -141,7 +156,7 @@
       <li><strong>A</strong>:數字對、位置也對。<strong>B</strong>:數字對、但位置不對。</li>
       <li>例如答案是 5281,你猜 1235 → <strong>1A2B</strong>(2 的位置對;1 和 5 有但位置不對)。</li>
       <li>全部都是 A 就過關,用越少次越好。</li>
-      <li>想重來或換位數:點上方的位數,就會重新出題。</li>
+      <li>想重來或換位數:點右上角的「選項」,選好後按「重新開始」。不想重來就再點一次「選項」收起來。</li>
       <li>電腦上也可以直接用鍵盤輸入數字、Backspace 刪除、Enter 送出。</li>
     </ul>
   </details>
@@ -165,6 +180,15 @@
   } catch (e) { /* 沒有 localStorage 也能玩 */ }
 
   var secret = '', input = '', tries = 0, won = false;
+  // 這一局的位數(len)和選項畫面上正在選的(pickLen)分開
+  var pickLen = len;
+  var setupEl = document.getElementById('setup'), gameEl = document.getElementById('game');
+  var lnkSetup = document.getElementById('lnkSetup'), btnStart = document.getElementById('btnStart');
+  function syncOptions() {
+    Array.prototype.forEach.call(lengthsEl.children, function (x) {
+      x.setAttribute('aria-pressed', String(+x.dataset.len === pickLen));
+    });
+  }
 
   function setStatus(text, kind) {
     statusEl.textContent = text;
@@ -194,9 +218,11 @@
     won = false;
     historyEl.innerHTML = '';
     try { localStorage.setItem('1a2b.len', String(len)); } catch (e) {}
-    Array.prototype.forEach.call(lengthsEl.children, function (x) {
-      x.setAttribute('aria-pressed', String(+x.dataset.len === len));
-    });
+    pickLen = len;
+    syncOptions();
+    // 開始後把選項收起來,免得玩到一半不小心點到
+    setupEl.hidden = true; gameEl.hidden = false; lnkSetup.hidden = false;
+    btnStart.textContent = '重新開始';
     render();
     setStatus('我想好一組 ' + len + ' 位數字了,每位都不重複。開始猜吧!');
   }
@@ -269,18 +295,24 @@
   lengthsEl.addEventListener('click', function (ev) {
     var b = ev.target.closest('button');
     if (!b) return;
-    len = +b.dataset.len;
-    newGame();
+    pickLen = +b.dataset.len;
+    syncOptions();
+  });
+  btnStart.addEventListener('click', function () { len = pickLen; newGame(); });
+  lnkSetup.addEventListener('click', function (ev) {
+    ev.preventDefault();
+    if (setupEl.hidden) { pickLen = len; syncOptions(); }
+    setupEl.hidden = !setupEl.hidden;
   });
 
   document.addEventListener('keydown', function (ev) {
-    if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+    if (gameEl.hidden || ev.ctrlKey || ev.metaKey || ev.altKey) return;
     if (ev.key >= '0' && ev.key <= '9' && ev.key.length === 1) addDigit(ev.key);
     else if (ev.key === 'Backspace') delDigit();
     else if (ev.key === 'Enter') { ev.preventDefault(); submit(); }
   });
 
-  newGame();
+  syncOptions();
 })();
 </script>
 <script>

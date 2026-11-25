@@ -49,6 +49,14 @@
   header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
   header a { color: var(--muted); text-decoration: none; font-size: 14px; }
   header a:hover { color: var(--accent); }
+  header nav { display: flex; gap: 16px; }
+  header a[hidden], #setup[hidden], #game[hidden] { display: none; }
+  #setup { margin-bottom: 10px; }
+  #btnStart {
+    width: 100%; min-height: 48px; margin-top: 4px; border: 1px solid var(--accent); border-radius: 10px;
+    background: var(--accent); color: #fff; font: inherit; font-size: 16px; cursor: pointer; touch-action: manipulation;
+  }
+  #btnStart:active { transform: scale(0.98); }
   h1 { margin: 0; font-size: 22px; letter-spacing: 2px; }
   h1 small { font-size: 13px; font-weight: 400; color: var(--muted); letter-spacing: 0; margin-left: 6px; }
 
@@ -119,9 +127,12 @@
 <main>
   <header>
     <h1>造橋<small>Hashiwokakero</small></h1>
-    <a href="../index.html">← 遊戲列表</a>
+    <nav>
+      <a href="#" id="lnkSetup" hidden>選項</a>
+    </nav>
   </header>
 
+  <div id="setup">
   <div class="row">
     <span class="label">大小</span>
     <div class="seg" id="sizes"></div>
@@ -134,7 +145,10 @@
       <button data-level="hard">困難</button>
     </div>
   </div>
+  <button id="btnStart">開始遊戲</button>
+  </div>
 
+  <div id="game" hidden>
   <div class="board-wrap">
     <svg id="board" xmlns="http://www.w3.org/2000/svg"></svg>
     <div class="busy" id="busy">出題中…</div>
@@ -147,6 +161,7 @@
   </div>
 
   <div id="status" role="status" aria-live="polite"></div>
+  </div>
 
   <details>
     <summary>玩法說明</summary>
@@ -156,7 +171,7 @@
       <li>橋只能直的或橫的,不能交叉,也不能跨過別的島;兩座島之間最多兩座橋。</li>
       <li>點一下兩座島之間:一座橋 → 兩座橋 → 沒有橋。</li>
       <li>電腦按右鍵、手機長按:直接拆掉那裡的橋。</li>
-      <li>想換一題:再點一次上方的大小或難度,就會出新題目。</li>
+      <li>想換一題或換大小、難度:點右上角的「選項」,選好後按「出新題目」。不想換就再點一次「選項」收起來。</li>
       <li>數字變灰表示橋數剛好,變紅表示橋太多。</li>
       <li>每一題都只有唯一解。</li>
     </ul>
@@ -218,30 +233,45 @@
     var t = ev.target.closest('button');
     if (!t) return;
     prefs.n = +t.dataset.n;
-    newGame();
+    syncOptions();
   });
   levelsEl.addEventListener('click', function (ev) {
     var t = ev.target.closest('button');
     if (!t) return;
     prefs.level = t.dataset.level;
-    newGame();
+    syncOptions();
   });
 
   /* ---------- 出題 ---------- */
+  // 這一題用的設定(current)和選項畫面上正在選的(prefs)分開
+  var current = { n: prefs.n, level: prefs.level };
+  var setupEl = document.getElementById('setup'), gameEl = document.getElementById('game');
+  var lnkSetup = document.getElementById('lnkSetup'), btnStart = document.getElementById('btnStart');
+  btnStart.addEventListener('click', newGame);
+  lnkSetup.addEventListener('click', function (ev) {
+    ev.preventDefault();
+    if (setupEl.hidden) { prefs = { n: current.n, level: current.level }; syncOptions(); }
+    setupEl.hidden = !setupEl.hidden;
+  });
+
   function newGame() {
     syncOptions();
     try { localStorage.setItem('hashi.prefs', JSON.stringify(prefs)); } catch (e) {}
+    current = { n: prefs.n, level: prefs.level };
+    // 開始後把選項收起來,免得玩到一半不小心點到
+    setupEl.hidden = true; gameEl.hidden = false; lnkSetup.hidden = false;
+    btnStart.textContent = '出新題目';
     busyEl.classList.add('show');
     setStatus('出題中…');
     setTimeout(function () {
-      puzzle = Hashi.generate(prefs.n, prefs.level);
+      puzzle = Hashi.generate(current.n, current.level);
       val = new Uint8Array(puzzle.edges.length);
       history = [];
       finished = false;
       buildBoard();
       render();
       busyEl.classList.remove('show');
-      setStatus(puzzle.n + '×' + puzzle.n + '・' + LEVEL_NAME[prefs.level] + ' — 用橋把所有島連起來吧!');
+      setStatus(puzzle.n + '×' + puzzle.n + '・' + LEVEL_NAME[current.level] + ' — 用橋把所有島連起來吧!');
     }, 30);
   }
 
@@ -439,7 +469,7 @@
     setStatus('提示:已幫你蓋上一座正確的橋(橘色)。', 'hint');
   });
 
-  newGame();
+  syncOptions();
 })();
 </script>
 <script>

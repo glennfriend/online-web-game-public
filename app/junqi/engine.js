@@ -182,6 +182,30 @@
     return out;
   }
 
+  /** 從 from 走到 to 實際經過的位置(含頭尾),給畫面做移動動畫用。要在棋還沒動之前呼叫。 */
+  function path(board, from, to) {
+    if (roadAdj[from].indexOf(to) >= 0) return [from, to];
+    // 沿著鐵路找最短的路(工兵會轉彎)
+    var prev = {}, queue = [from], h, i, cur, nx;
+    prev[from] = -1;
+    for (h = 0; h < queue.length; h++) {
+      cur = queue[h];
+      var list = railNext[cur];
+      for (i = 0; i < list.length; i++) {
+        nx = list[i];
+        if (nx < 0 || prev[nx] !== undefined) continue;
+        prev[nx] = cur;
+        if (nx === to) {
+          var out = [];
+          for (; nx >= 0; nx = prev[nx]) out.unshift(nx);
+          return out;
+        }
+        if (!board[nx]) queue.push(nx);
+      }
+    }
+    return [from, to];
+  }
+
   /** 攻方 a 碰守方 d 的結果:'win' 攻方贏、'lose' 攻方輸、'tie' 同歸於盡、'flag' 奪旗 */
   function battle(a, d) {
     if (d === FLAG) return 'flag';
@@ -206,7 +230,7 @@
   /** 執行一步棋(不檢查合法性,呼叫前先用 legalMoves 確認)。回傳事件。 */
   function move(state, from, to) {
     var board = state.board, a = board[from], d = board[to];
-    var ev = { from: from, to: to, result: 'move', attacker: a, defender: d, commanderDied: [] };
+    var ev = { from: from, to: to, result: 'move', attacker: a, defender: d, commanderDied: [], path: path(board, from, to) };
     a.moved = true;
     state.lastMove[a.side] = { from: from, to: to };
     if (!d) {
@@ -316,6 +340,31 @@
       return ev;
     }
 
+    // 保護軍旗:敵人貼到軍旗旁邊,或下一步就能貼上來,都要處理
+    var flagPos = -1, near1 = {}, near2 = {}, gaps = {};
+    for (p = 0; p < N; p++) if (board[p] && board[p].side === side && board[p].type === FLAG) flagPos = p;
+    if (flagPos >= 0) roadAdj[flagPos].forEach(function (n) {
+      var q = board[n];
+      if (q && q.side !== side) near1[n] = 1;                       // 已經貼在軍旗旁邊
+      else if (!q) {
+        for (var h in reach) if (reach[h].indexOf(n) >= 0) { near2[h] = 1; gaps[n] = 1; }   // 下一步能貼上來
+      }
+    });
+    function pRemove(me, pos) {
+      var b = beliefs[pos], sum = 0;
+      for (var k = 0; k < b.length; k++) {
+        var r = battle(me.type, b[k][0]);
+        if (r === 'win' || r === 'tie') sum += b[k][1];
+      }
+      return sum;
+    }
+    function guard(me, to) {
+      if (near1[to]) return 3000 * pRemove(me, to);     // 吃掉貼著軍旗的棋,比什麼都重要
+      if (near2[to]) return 60 * pRemove(me, to);       // 先解決快要貼上來的
+      if (gaps[to]) return 40;                          // 或把軍旗旁邊的空位堵起來
+      return 0;
+    }
+
     var best = null, bestScore = -Infinity;
     var last = state.lastMove[side];
     for (p = 0; p < N; p++) {
@@ -335,6 +384,7 @@
           s = fwd * w + (camp[to] ? 2 : 0) - danger(to, me) + here;
         }
         if (last && last.from === to && last.to === p) s -= 4;   // 不要來回踱步
+        s += guard(me, to);
         s += rng() * 1.2;
         if (s > bestScore) { bestScore = s; best = { from: p, to: to }; }
       }

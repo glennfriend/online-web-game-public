@@ -55,6 +55,14 @@
   header { display: flex; align-items: baseline; justify-content: space-between; height: 32px; }
   header a { color: var(--muted); text-decoration: none; font-size: 14px; }
   header a:hover { color: var(--accent); }
+  header nav { display: flex; gap: 16px; }
+  header a[hidden], #setup[hidden], #game[hidden] { display: none; }
+  #setup { margin-bottom: 10px; }
+  #btnStart {
+    width: 100%; min-height: 48px; margin-top: 4px; border: 1px solid var(--accent); border-radius: 10px;
+    background: var(--accent); color: #fff; font: inherit; font-size: 16px; cursor: pointer; touch-action: manipulation;
+  }
+  #btnStart:active { transform: scale(0.98); }
   h1 { margin: 0; font-size: 20px; letter-spacing: 2px; }
 
   .row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
@@ -150,17 +158,16 @@
 <main>
   <header>
     <h1>圍牆棋</h1>
-    <a href="../index.html">← 列表</a>
+    <nav>
+      <a href="#" id="lnkSetup" hidden>選項</a>
+    </nav>
   </header>
 
+  <div id="setup">
   <div class="row">
     <span class="label">人數</span>
     <div class="seg" id="optPlayers">
       <button data-v="2">2</button><button data-v="3">3</button><button data-v="4">4</button>
-    </div>
-    <span class="label">對手</span>
-    <div class="seg" id="optRival">
-      <button data-v="ai">電腦</button><button data-v="human">真人</button>
     </div>
   </div>
   <div class="row">
@@ -169,7 +176,10 @@
       <button data-v="off">不使用</button><button data-v="on">每人一次</button>
     </div>
   </div>
+  <button id="btnStart">開始遊戲</button>
+  </div>
 
+  <div id="game" hidden>
   <div id="players"></div>
 
   <div id="boardBox">
@@ -183,6 +193,7 @@
     <button id="btnBack" class="full" hidden>重選</button>
     <button id="btnAgain" class="primary full" hidden>再玩一次</button>
   </div>
+  </div>
 
   <details>
     <summary>玩法說明</summary>
@@ -194,8 +205,8 @@
       <li><strong>領地</strong>:一塊被牆圍起來的區域裡,如果只剩一個人的棋,那一塊就是他的,會染上他的顏色。</li>
       <li><strong>結束</strong>:所有人的棋都被隔開時結束。比誰的格子多;一樣多就比誰最大的一塊比較大。沒有棋的區域不算任何人的。輪到的人沒有棋能動就跳過。</li>
       <li><strong>破牆</strong>(可選):每人整局一次。移動時可以打掉擋在路上的一道牆穿過去,走完一樣要蓋一道牆。選棋後,<em>虛線圈</em>的格子就是要用破牆才到得了的地方。</li>
-      <li><strong>對手</strong>:選「電腦」時你是藍色,其他都是電腦;選「真人」時大家輪流用同一支手機。</li>
-      <li>想重來:點上方任何一個選項,就會重新開始。</li>
+      <li><strong>對手</strong>:你是藍色,其他都是電腦。</li>
+      <li>想重來或換設定:點右上角的「選項」,選好後按「重新開始」。不想重來就再點一次「選項」收起來。</li>
     </ul>
   </details>
 </main>
@@ -214,13 +225,16 @@
   var btnBack = $('btnBack'), btnAgain = $('btnAgain');
   var KIND = ['方棋', '圓棋'];
 
-  var prefs = { players: 2, rival: 'ai', hammer: 'off' };
+  var prefs = { players: 2, hammer: 'off' };
   try {
     var saved = JSON.parse(localStorage.getItem('walls.prefs') || 'null');
-    if (saved && Walls.SETUPS[saved.players] && (saved.rival === 'ai' || saved.rival === 'human') &&
-        (saved.hammer === 'on' || saved.hammer === 'off')) prefs = saved;
+    if (saved && Walls.SETUPS[saved.players] && (saved.hammer === 'on' || saved.hammer === 'off')) {
+      prefs = { players: saved.players, hammer: saved.hammer };
+    }
   } catch (e) { /* 沒有 localStorage 也能玩 */ }
 
+  var game = { players: prefs.players, hammer: prefs.hammer };
+  var setupEl = $('setup'), gameEl = $('game'), lnkSetup = $('lnkSetup'), btnStart = $('btnStart');
   var state = null, n = 7, BW = 0, gen = 0;
   // 玩家這一手進行到哪:pick 選棋 → dest 選目的地 → wall 選牆;busy = 電腦或動畫進行中
   var ui = { step: 'busy', sel: -1, moves: [], move: null };
@@ -237,7 +251,7 @@
     var g = gen;
     setTimeout(function () { if (g === gen) fn(); }, ms);
   }
-  function isAI(p) { return prefs.rival === 'ai' && p > 0; }
+  function isAI(p) { return p > 0; }      // 玩家是藍(0),其他都是電腦
   function label(p) { return '<b class="c' + p + '">' + NAMES[p] + '</b>'; }
   function setStatus(html) { statusEl.innerHTML = html; }
   function cx(pos) { return M + (pos % n) * C + C / 2; }
@@ -257,14 +271,13 @@
       var b = ev.target.closest('button');
       if (!b) return;
       prefs[key] = parse ? parse(b.dataset.v) : b.dataset.v;
-      newGame();
+      syncOptions();
     });
   }
   bindOption('optPlayers', 'players', Number);
-  bindOption('optRival', 'rival');
   bindOption('optHammer', 'hammer');
   function syncOptions() {
-    [['optPlayers', 'players'], ['optRival', 'rival'], ['optHammer', 'hammer']].forEach(function (o) {
+    [['optPlayers', 'players'], ['optHammer', 'hammer']].forEach(function (o) {
       Array.prototype.forEach.call($(o[0]).children, function (b) {
         b.setAttribute('aria-pressed', String(b.dataset.v === String(prefs[o[1]])));
       });
@@ -276,7 +289,11 @@
     gen++;
     syncOptions();
     try { localStorage.setItem('walls.prefs', JSON.stringify(prefs)); } catch (e) {}
-    state = Walls.newGame(prefs.players, prefs.hammer === 'on');
+    game = { players: prefs.players, hammer: prefs.hammer };
+    // 開始後把選項收起來,免得玩到一半不小心點到
+    setupEl.hidden = true; gameEl.hidden = false; lnkSetup.hidden = false;
+    btnStart.textContent = '重新開始';
+    state = Walls.newGame(game.players, game.hammer === 'on');
     n = state.n;
     BW = n * C + M * 2;
     lastWall = null;
@@ -345,7 +362,7 @@
       var cls = 'pc c' + pc.player + (pc.kind === Walls.SQUARE ? ' sq' : '');
       if (node._new) { cls += ' new'; node._new = false; }
       if (i === ui.sel) cls += ' sel';
-      // 輪到真人選棋時,不能動的自己的棋變淡
+      // 輪到玩家選棋時,不能動的自己的棋變淡
       if (ui.step === 'pick' && pc.player === state.turn && movable.indexOf(i) < 0) cls += ' idle';
       node.className = cls;
     }
@@ -414,8 +431,7 @@
       if (n * n - used > 0) text += '、無人 ' + (n * n - used);
       var w = state.over.winners;
       if (w.length > 1) text += '。平手!';
-      else if (prefs.rival === 'ai') text += w[0] === 0 ? '。你贏了!' : '。' + label(w[0]) + '贏了。';
-      else text += '。' + label(w[0]) + '贏了!';
+      else text += w[0] === 0 ? '。你贏了!' : '。' + label(w[0]) + '贏了。';
       setStatus(text);
       btnAgain.hidden = false;
       return;
@@ -524,7 +540,20 @@
     if (ui.step === 'wall') pick(ui.sel);
     else if (ui.step === 'dest') next();
   });
-  btnAgain.addEventListener('click', newGame);
+  btnAgain.addEventListener('click', function () {
+    // 用這一局的設定再來一次
+    prefs = { players: game.players, hammer: game.hammer };
+    newGame();
+  });
+  btnStart.addEventListener('click', newGame);
+  lnkSetup.addEventListener('click', function (ev) {
+    ev.preventDefault();
+    if (setupEl.hidden) {
+      prefs = { players: game.players, hammer: game.hammer };
+      syncOptions();
+    }
+    setupEl.hidden = !setupEl.hidden;
+  });
 
   // 破牆的訊息要蓋過下一位的提示一下子
   var baseSetStatus = setStatus;
@@ -533,7 +562,7 @@
     baseSetStatus(html);
   };
 
-  newGame();
+  syncOptions();
 })();
 </script>
 <script>

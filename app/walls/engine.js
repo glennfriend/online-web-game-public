@@ -202,11 +202,16 @@
     s.over = { scores: sc.total, winners: winners };
   }
 
-  /** 換下一位能動的玩家(沒有棋能動的人跳過);所有棋都被隔開,或沒有人能動,就結束 */
+  /** 換下一位能動的玩家(沒有棋能動的人跳過);所有棋都被隔開,或爭議區域裡的棋都動不了,就結束 */
   function advance(s) {
     var reg = regions(s);
-    var anyContested = reg.list.some(function (r) { return r.contested; });
-    if (anyContested) {
+    // 還有得爭 = 有棋在「還沒分出主人的區域」裡,而且那顆棋還能動。
+    // 如果剩下的爭議區域裡的棋全都卡死了,再走下去也改變不了什麼,直接結束。
+    var live = false;
+    for (var i = 0; i < s.pieces.length && !live; i++) {
+      if (reg.list[reg.id[s.pieces[i].pos]].contested && moves(s, i).length) live = true;
+    }
+    if (live) {
       for (var k = 1; k <= s.players; k++) {
         var p = (s.turn + k) % s.players;
         if (movablePieces(s, p).length) { s.turn = p; return; }
