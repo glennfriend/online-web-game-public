@@ -8,7 +8,7 @@
  */
 'use strict';
 
-var VERSION = 'games-v15';
+var VERSION = 'games-v16';
 
 var FILES = [
   'index.html',

@@ -40,7 +40,7 @@
     }
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body { margin: 0; }
+  html, body { margin: 0; overscroll-behavior-y: contain; }   /* 不要往下一拉就重新整理 */
   body {
     background: var(--bg);
     color: var(--ink);

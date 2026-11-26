@@ -34,7 +34,7 @@
     }
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body { margin: 0; }
+  html, body { margin: 0; overscroll-behavior-y: contain; }   /* 不要往下一拉就重新整理 */
   body {
     background: var(--bg);
     color: var(--ink);
@@ -254,6 +254,40 @@
     setupEl.hidden = !setupEl.hidden;
   });
 
+  /* ---------- 存檔:頁面被重新整理(或被手機收掉再打開)也能接著玩 ---------- */
+  var SAVE_KEY = 'hashi.game';
+  function pack(k, v) { return ArrayBuffer.isView(v) ? { __ta: v.constructor.name, d: Array.prototype.slice.call(v) } : v; }
+  function unpack(k, v) { return v && v.__ta && typeof self[v.__ta] === 'function' ? new self[v.__ta](v.d) : v; }
+  function save() {
+    if (!puzzle) return;
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify({ current: current, puzzle: puzzle, marks: val, history: history, finished: finished }, pack));
+    } catch (e) { /* 存不了就算了 */ }
+  }
+  function restore() {
+    try {
+      var g = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null', unpack);
+      if (!g || !g.puzzle || !g.marks || g.finished || !LEVEL_NAME[g.current.level]) return false;
+      current = g.current;
+      prefs = { n: current.n, level: current.level };
+      puzzle = g.puzzle;
+      /* 造橋不需要另外準備什麼 */
+      val = g.marks;
+      history = g.history || [];
+      finished = false;
+      syncOptions();
+      setupEl.hidden = true; gameEl.hidden = false; lnkSetup.hidden = false;
+      btnStart.textContent = '出新題目';
+      buildBoard();
+      render();
+      setStatus('接著上次的題目繼續。');
+      return true;
+    } catch (e) {
+      puzzle = null;
+      return false;
+    }
+  }
+
   function newGame() {
     syncOptions();
     try { localStorage.setItem('hashi.prefs', JSON.stringify(prefs)); } catch (e) {}
@@ -325,6 +359,7 @@
       islandEls[i].classList.toggle('over', sum > puzzle.islands[i].need);
     }
     document.getElementById('btnUndo').disabled = history.length === 0;
+    save();
   }
 
   function clearMarks() {
@@ -430,7 +465,8 @@
     clearMarks();
     if (Hashi.checkAnswer(puzzle, val)) {
       finished = true;
-      setStatus('✔ 正確!恭喜過關 🎉 點上方的大小或難度可以再玩一題。', 'ok');
+      save();
+      setStatus('✔ 正確!恭喜過關 🎉 點右上角的「選項」可以再玩一題。', 'ok');
     } else {
       setStatus('✘ 失敗,答案還不對,再檢查看看。', 'bad');
     }
@@ -470,6 +506,7 @@
   });
 
   syncOptions();
+  restore();
 })();
 </script>
 <script>
